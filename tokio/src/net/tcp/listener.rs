@@ -1,7 +1,7 @@
 use crate::io::{Interest, PollEvented};
 use crate::net::tcp::TcpStream;
 
-cfg_not_wasi! {
+cfg_not_wasi_classic! {
     use crate::net::{to_socket_addrs, ToSocketAddrs};
 }
 
@@ -58,7 +58,7 @@ cfg_net! {
 }
 
 impl TcpListener {
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Creates a new TcpListener, which will be bound to the specified address.
         ///
         /// The returned listener is ready for accepting connections.
@@ -285,7 +285,7 @@ impl TcpListener {
         }
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         pub(crate) fn new(listener: mio::net::TcpListener) -> io::Result<TcpListener> {
             let io = PollEvented::new(listener)?;
             Ok(TcpListener { io })

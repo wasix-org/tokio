@@ -391,6 +391,7 @@ impl OpenOptions {
     }
 
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
+    #[cfg_attr(tokio_wasi, allow(dead_code))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.0
     }

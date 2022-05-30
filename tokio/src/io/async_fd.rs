@@ -1,6 +1,9 @@
 use crate::io::driver::{Handle, Interest, ReadyEvent, Registration};
 
+#[cfg(unix)]
 use mio::unix::SourceFd;
+#[cfg(tokio_wasi)]
+use mio::wasi::SourceFd;
 use std::io;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::{task::Context, task::Poll};

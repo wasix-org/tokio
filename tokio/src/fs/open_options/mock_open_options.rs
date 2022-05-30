@@ -6,6 +6,8 @@ use crate::fs::mocks::MockFile;
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
+#[cfg(tokio_wasi)]
+use std::os::wasi::fs::OpenOptionsExt;
 use std::{io, path::Path};
 
 mock! {
@@ -22,7 +24,7 @@ mock! {
     impl Clone for OpenOptions {
         fn clone(&self) -> Self;
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, tokio_wasi))]
     impl OpenOptionsExt for OpenOptions {
         fn custom_flags(&mut self, flags: i32) -> &mut Self;
         fn mode(&mut self, mode: u32) -> &mut Self;

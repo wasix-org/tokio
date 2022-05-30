@@ -240,6 +240,15 @@ pub(crate) mod unix {
 #[cfg(windows)]
 mod imp;
 
+#[path = "wasi/mod.rs"]
+#[cfg(tokio_wasi)]
+mod imp;
+
+#[cfg(tokio_wasi)]
+pub(crate) mod wasi {
+    pub(crate) use super::imp::*;
+}
+
 mod kill;
 
 use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -1085,14 +1094,14 @@ impl Child {
     ///
     /// ```
     /// # #[cfg(not(unix))]fn main(){}
-    /// # #[cfg(unix)]
+    /// # #[cfg(any(unix, target_os = "wasi"))]
     /// use tokio::io::AsyncWriteExt;
-    /// # #[cfg(unix)]
+    /// # #[cfg(any(unix, target_os = "wasi"))]
     /// use tokio::process::Command;
-    /// # #[cfg(unix)]
+    /// # #[cfg(any(unix, target_os = "wasi"))]
     /// use std::process::Stdio;
     ///
-    /// # #[cfg(unix)]
+    /// # #[cfg(any(unix, target_os = "wasi"))]
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut child = Command::new("cat")

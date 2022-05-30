@@ -80,6 +80,13 @@ impl std::os::unix::io::AsRawFd for Stderr {
     }
 }
 
+#[cfg(tokio_wasi)]
+impl std::os::wasi::io::AsRawFd for Stderr {
+    fn as_raw_fd(&self) -> std::os::wasi::io::RawFd {
+        std::io::stderr().as_raw_fd()
+    }
+}
+
 #[cfg(windows)]
 impl std::os::windows::io::AsRawHandle for Stderr {
     fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {

@@ -78,6 +78,6 @@ pub use self::rand::thread_rng_n;
     feature = "time",
     feature = "net",
     feature = "process",
-    all(unix, feature = "signal")
+    all(any(unix, tokio_wasix), feature = "signal")
 ))]
 pub(crate) mod error;

@@ -304,7 +304,7 @@ cfg_rt! {
         CurrentThread(BasicScheduler),
 
         /// Execute tasks across multiple threads.
-        #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+        #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
         ThreadPool(ThreadPool),
     }
 
@@ -312,7 +312,7 @@ cfg_rt! {
     type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
 
     impl Runtime {
-        cfg_not_wasi! {
+        cfg_not_wasi_classic! {
             /// Creates a new runtime instance with default configuration values.
             ///
             /// This results in the multi threaded scheduler, I/O driver, and time driver being
@@ -484,7 +484,7 @@ cfg_rt! {
 
             match &self.kind {
                 Kind::CurrentThread(exec) => exec.block_on(future),
-                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
                 Kind::ThreadPool(exec) => exec.block_on(future),
             }
         }
@@ -614,7 +614,7 @@ cfg_rt! {
                         },
                     }
                 },
-                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
                 Kind::ThreadPool(_) => {
                     // The threaded scheduler drops its tasks on its worker threads, which is
                     // already in the runtime's context.

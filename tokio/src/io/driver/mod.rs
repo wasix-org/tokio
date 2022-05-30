@@ -73,7 +73,7 @@ pub(super) struct Inner {
 
     /// Used to wake up the reactor from a call to `turn`.
     /// Not supported on Wasi due to lack of threading support.
-    #[cfg(not(tokio_wasi))]
+    #[cfg(not(tokio_wasi_classic))]
     waker: mio::Waker,
 
     metrics: IoDriverMetrics,
@@ -93,6 +93,7 @@ enum Tick {
 // TODO: Don't use a fake token. Instead, reserve a slot entry for the wakeup
 // token.
 const TOKEN_WAKEUP: mio::Token = mio::Token(1 << 31);
+const TOKEN_NOOP: mio::Token = mio::Token(4294967295);
 
 const ADDRESS: bit::Pack = bit::Pack::least_significant(24);
 
@@ -117,7 +118,7 @@ impl Driver {
     /// creation.
     pub(crate) fn new() -> io::Result<Driver> {
         let poll = mio::Poll::new()?;
-        #[cfg(not(tokio_wasi))]
+        #[cfg(not(tokio_wasi_classic))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
         let registry = poll.registry().try_clone()?;
 
@@ -132,7 +133,7 @@ impl Driver {
             inner: Arc::new(Inner {
                 registry,
                 io_dispatch: RwLock::new(IoDispatcher::new(allocator)),
-                #[cfg(not(tokio_wasi))]
+                #[cfg(not(tokio_wasi_classic))]
                 waker,
                 metrics: IoDriverMetrics::default(),
             }),
@@ -181,7 +182,8 @@ impl Driver {
         for event in events.iter() {
             let token = event.token();
 
-            if token != TOKEN_WAKEUP {
+            if token != TOKEN_WAKEUP &&
+               token != TOKEN_NOOP {
                 self.dispatch(token, Ready::from_mio(event));
                 ready_count += 1;
             }
@@ -310,7 +312,7 @@ impl Handle {
     /// blocked in `turn`, then the next call to `turn` will not block and
     /// return immediately.
     fn wakeup(&self) {
-        #[cfg(not(tokio_wasi))]
+        #[cfg(not(tokio_wasi_classic))]
         self.inner.waker.wake().expect("failed to wake I/O driver");
     }
 }

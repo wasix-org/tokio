@@ -79,6 +79,13 @@ impl std::os::unix::io::AsRawFd for Stdout {
     }
 }
 
+#[cfg(tokio_wasi)]
+impl std::os::wasi::io::AsRawFd for Stdout {
+    fn as_raw_fd(&self) -> std::os::wasi::io::RawFd {
+        std::io::stdout().as_raw_fd()
+    }
+}
+
 #[cfg(windows)]
 impl std::os::windows::io::AsRawHandle for Stdout {
     fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {

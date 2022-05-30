@@ -174,7 +174,7 @@ pub(crate) type ThreadNameFn = std::sync::Arc<dyn Fn() -> String + Send + Sync +
 
 pub(crate) enum Kind {
     CurrentThread,
-    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
     MultiThread,
 }
 
@@ -197,7 +197,7 @@ impl Builder {
         Builder::new(Kind::CurrentThread, 31, EVENT_INTERVAL)
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Returns a new builder with the multi thread scheduler selected.
         ///
         /// Configuration methods can be chained on the return value.
@@ -274,8 +274,8 @@ impl Builder {
     pub fn enable_all(&mut self) -> &mut Self {
         #[cfg(any(
             feature = "net",
-            all(unix, feature = "process"),
-            all(unix, feature = "signal")
+            all(any(unix, tokio_wasix), feature = "process"),
+            all(any(unix, tokio_wasix), feature = "signal")
         ))]
         self.enable_io();
         #[cfg(feature = "time")]
@@ -619,7 +619,7 @@ impl Builder {
     pub fn build(&mut self) -> io::Result<Runtime> {
         match &self.kind {
             Kind::CurrentThread => self.build_basic_runtime(),
-            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
             Kind::MultiThread => self.build_threaded_runtime(),
         }
     }
@@ -628,7 +628,7 @@ impl Builder {
         driver::Cfg {
             enable_pause_time: match self.kind {
                 Kind::CurrentThread => true,
-                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
                 Kind::MultiThread => false,
             },
             enable_io: self.enable_io,

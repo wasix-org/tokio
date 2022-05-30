@@ -1,6 +1,9 @@
+#![cfg_attr(tokio_wasix, allow(unused, missing_docs))]
 use crate::future::poll_fn;
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
+#[cfg(unix)]
 use crate::net::unix::split::{split, ReadHalf, WriteHalf};
+#[cfg(unix)]
 use crate::net::unix::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
 use crate::net::unix::ucred::{self, UCred};
 use crate::net::unix::SocketAddr;
@@ -37,12 +40,20 @@ cfg_net_unix! {
     }
 }
 
+cfg_net_fs_wasix! {
+    pub struct UnixStream {
+        pub(crate) io: crate::fs::File,
+    }
+}
+
+#[cfg(any(unix, all(tokio_wasix, feature = "fs")))]
 impl UnixStream {
     /// Connects to the socket named by `path`.
     ///
     /// This function will create a new Unix socket and connect to the path
     /// specified, associating the returned stream with the default event loop's
     /// handle.
+    #[cfg(unix)]
     pub async fn connect<P>(path: P) -> io::Result<UnixStream>
     where
         P: AsRef<Path>,
@@ -128,6 +139,8 @@ impl UnixStream {
     ///     }
     /// }
     /// ```
+    /// 
+    #[cfg(unix)]
     pub async fn ready(&self, interest: Interest) -> io::Result<Ready> {
         let event = self.io.registration().readiness(interest).await?;
         Ok(event.ready)
@@ -185,6 +198,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub async fn readable(&self) -> io::Result<()> {
         self.ready(Interest::READABLE).await?;
         Ok(())
@@ -219,6 +233,7 @@ impl UnixStream {
     /// This function may encounter any standard I/O error except `WouldBlock`.
     ///
     /// [`readable`]: method@Self::readable
+    #[cfg(unix)]
     pub fn poll_read_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.io.registration().poll_read_ready(cx).map_ok(|_| ())
     }
@@ -284,6 +299,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.io
             .registration()
@@ -362,6 +378,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub fn try_read_vectored(&self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
         self.io
             .registration()
@@ -428,6 +445,7 @@ impl UnixStream {
         ///     Ok(())
         /// }
         /// ```
+        #[cfg(unix)]
         pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
             self.io.registration().try_io(Interest::READABLE, || {
                 use std::io::Read;
@@ -497,6 +515,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub async fn writable(&self) -> io::Result<()> {
         self.ready(Interest::WRITABLE).await?;
         Ok(())
@@ -531,6 +550,7 @@ impl UnixStream {
     /// This function may encounter any standard I/O error except `WouldBlock`.
     ///
     /// [`writable`]: method@Self::writable
+    #[cfg(unix)]
     pub fn poll_write_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.io.registration().poll_write_ready(cx).map_ok(|_| ())
     }
@@ -585,6 +605,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
         self.io
             .registration()
@@ -647,6 +668,7 @@ impl UnixStream {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(unix)]
     pub fn try_write_vectored(&self, buf: &[io::IoSlice<'_>]) -> io::Result<usize> {
         self.io
             .registration()
@@ -680,6 +702,7 @@ impl UnixStream {
     /// [`readable()`]: UnixStream::readable()
     /// [`writable()`]: UnixStream::writable()
     /// [`ready()`]: UnixStream::ready()
+    #[cfg(unix)]
     pub fn try_io<R>(
         &self,
         interest: Interest,
@@ -705,11 +728,20 @@ impl UnixStream {
     /// The runtime is usually set implicitly when this function is called
     /// from a future driven by a tokio runtime, otherwise runtime can be set
     /// explicitly with [`Runtime::enter`](crate::runtime::Runtime::enter) function.
+    #[cfg(unix)]
     #[track_caller]
     pub fn from_std(stream: net::UnixStream) -> io::Result<UnixStream> {
         let stream = mio::net::UnixStream::from_std(stream);
         let io = PollEvented::new(stream)?;
 
+        Ok(UnixStream { io })
+    }
+
+    #[cfg(all(tokio_wasix, features = "fs"))]
+    #[track_caller]
+    pub fn from_std(stream: std::os::unix::net::UnixStream) -> io::Result<UnixStream> {
+        stream.set_nonblocking(true)?;
+        let io = crate::fs::File::from_std(unsafe { std::fs::File::from_raw_fd(stream.into_raw_fd()) });
         Ok(UnixStream { io })
     }
 
@@ -751,6 +783,7 @@ impl UnixStream {
     /// [`tokio::net::UnixStream`]: UnixStream
     /// [`std::os::unix::net::UnixStream`]: std::os::unix::net::UnixStream
     /// [`set_nonblocking`]: fn@std::os::unix::net::UnixStream::set_nonblocking
+    #[cfg(unix)]
     pub fn into_std(self) -> io::Result<std::os::unix::net::UnixStream> {
         self.io
             .into_inner()
@@ -763,6 +796,7 @@ impl UnixStream {
     /// This function will create a pair of interconnected Unix sockets for
     /// communicating back and forth between one another. Each socket will
     /// be associated with the default event loop's handle.
+    #[cfg(unix)]
     pub fn pair() -> io::Result<(UnixStream, UnixStream)> {
         let (a, b) = mio::net::UnixStream::pair()?;
         let a = UnixStream::new(a)?;
@@ -771,6 +805,15 @@ impl UnixStream {
         Ok((a, b))
     }
 
+    #[cfg(all(tokio_wasix, features = "fs"))]
+    pub fn pair() -> io::Result<(UnixStream, UnixStream)> {
+        let (tx, rx) = std::os::unix::net::UnixStream::pair()?;
+        let tx = Self::from_std(tx)?;
+        let rx = Self::from_std(rx)?;
+        Ok((tx, rx))
+    }
+
+    #[cfg(unix)]
     pub(crate) fn new(stream: mio::net::UnixStream) -> io::Result<UnixStream> {
         let io = PollEvented::new(stream)?;
         Ok(UnixStream { io })
@@ -792,6 +835,7 @@ impl UnixStream {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(unix)]
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.io.local_addr().map(SocketAddr)
     }
@@ -812,16 +856,19 @@ impl UnixStream {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(unix)]
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
         self.io.peer_addr().map(SocketAddr)
     }
 
     /// Returns effective credentials of the process which called `connect` or `pair`.
+    #[cfg(unix)]
     pub fn peer_cred(&self) -> io::Result<UCred> {
         ucred::get_peer_cred(self)
     }
 
     /// Returns the value of the `SO_ERROR` option.
+    #[cfg(unix)]
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
         self.io.take_error()
     }
@@ -831,8 +878,14 @@ impl UnixStream {
     /// This function will cause all pending and future I/O calls on the
     /// specified portions to immediately return with an appropriate value
     /// (see the documentation of `Shutdown`).
+    #[cfg(unix)]
     pub(super) fn shutdown_std(&self, how: Shutdown) -> io::Result<()> {
         self.io.shutdown(how)
+    }
+
+    #[cfg(tokio_wasix)]
+    pub(super) fn shutdown_std(&self, _how: Shutdown) -> io::Result<()> {
+        Err(std::io::ErrorKind::Unsupported.into())
     }
 
     // These lifetime markers also appear in the generated documentation, and make
@@ -845,6 +898,7 @@ impl UnixStream {
     /// moved into independently spawned tasks.
     ///
     /// [`into_split`]: Self::into_split()
+    #[cfg(unix)]
     pub fn split<'a>(&'a mut self) -> (ReadHalf<'a>, WriteHalf<'a>) {
         split(self)
     }
@@ -860,11 +914,13 @@ impl UnixStream {
     ///
     /// [`split`]: Self::split()
     /// [`shutdown()`]: fn@crate::io::AsyncWriteExt::shutdown
+    #[cfg(unix)]
     pub fn into_split(self) -> (OwnedReadHalf, OwnedWriteHalf) {
         split_owned(self)
     }
 }
 
+#[cfg(unix)]
 impl TryFrom<net::UnixStream> for UnixStream {
     type Error = io::Error;
 
@@ -877,6 +933,7 @@ impl TryFrom<net::UnixStream> for UnixStream {
     }
 }
 
+#[cfg(unix)]
 impl AsyncRead for UnixStream {
     fn poll_read(
         self: Pin<&mut Self>,
@@ -887,6 +944,18 @@ impl AsyncRead for UnixStream {
     }
 }
 
+#[cfg(all(tokio_wasix, feature = "fs"))]
+impl AsyncRead for UnixStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.io).poll_read(cx, buf)
+    }
+}
+
+#[cfg(unix)]
 impl AsyncWrite for UnixStream {
     fn poll_write(
         self: Pin<&mut Self>,
@@ -918,6 +987,38 @@ impl AsyncWrite for UnixStream {
     }
 }
 
+#[cfg(all(tokio_wasix, feature = "fs"))]
+impl AsyncWrite for UnixStream {
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.io).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.io.is_write_vectored()
+    }
+
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.io).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.io).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.io).poll_shutdown(cx)
+    }
+}
+
+#[cfg(unix)]
 impl UnixStream {
     // == Poll IO functions that takes `&self` ==
     //
@@ -951,12 +1052,14 @@ impl UnixStream {
     }
 }
 
+#[cfg(any(unix, all(tokio_wasix, feature = "fs")))]
 impl fmt::Debug for UnixStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.io.fmt(f)
     }
 }
 
+#[cfg(any(unix, all(tokio_wasix, feature = "fs")))]
 impl AsRawFd for UnixStream {
     fn as_raw_fd(&self) -> RawFd {
         self.io.as_raw_fd()

@@ -4,7 +4,7 @@
 //! `Signal` type for receiving notifications of signals.
 
 #![cfg(unix)]
-#![cfg_attr(docsrs, doc(cfg(all(unix, feature = "signal"))))]
+#![cfg_attr(docsrs, doc(cfg(all(any(unix, tokio_wasix), feature = "signal"))))]
 
 use crate::signal::registry::{globals, EventId, EventInfo, Globals, Init, Storage};
 use crate::signal::RxFuture;

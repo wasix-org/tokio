@@ -1,5 +1,7 @@
 #[cfg(unix)]
 use super::unix::{self as os_impl};
+#[cfg(tokio_wasi)]
+use super::wasi::{self as os_impl};
 #[cfg(windows)]
 use super::windows::{self as os_impl};
 

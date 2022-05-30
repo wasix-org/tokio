@@ -1,5 +1,5 @@
 //! Benchmark the delay in propagating OS signals to any listeners.
-#![cfg(unix)]
+#![cfg(any(unix, target_os = "wasi"))]
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use std::future::Future;

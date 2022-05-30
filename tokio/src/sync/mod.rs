@@ -441,7 +441,7 @@ cfg_sync! {
     pub mod mpsc;
 
     mod mutex;
-    pub use mutex::{Mutex, MutexGuard, TryLockError, OwnedMutexGuard, MappedMutexGuard};
+    pub use mutex::{Mutex, MutexGuard, OwnedMutexGuard, MappedMutexGuard};
 
     pub(crate) mod notify;
     pub use notify::Notify;
@@ -479,7 +479,7 @@ cfg_not_sync! {
         pub(crate) use mutex::Mutex;
     }
 
-    #[cfg(any(feature = "rt", feature = "signal", all(unix, feature = "process")))]
+    #[cfg(any(feature = "rt", feature = "signal", all(any(unix, tokio_wasix), feature = "process")))]
     pub(crate) mod notify;
 
     #[cfg(any(feature = "rt", all(windows, feature = "process")))]
@@ -490,7 +490,7 @@ cfg_not_sync! {
         pub(crate) use task::AtomicWaker;
     }
 
-    #[cfg(any(feature = "signal", all(unix, feature = "process")))]
+    #[cfg(any(feature = "signal", all(any(unix, tokio_wasix), feature = "process")))]
     pub(crate) mod watch;
 }
 
