@@ -58,7 +58,8 @@ net = [
   "winapi/winnt",
   "winapi/minwindef",
   "winapi/accctrl",
-  "winapi/aclapi"
+  "winapi/aclapi",
+  "socket2"
 ]
 process = [
   "bytes",
@@ -113,24 +114,24 @@ pin-project-lite = "0.2.0"
 bytes = { version = "1.0.0", optional = true }
 once_cell = { version = "1.5.2", optional = true }
 memchr = { version = "2.2", optional = true }
-mio = { version = "0.8.4", optional = true }
+mio = { git = "https://github.com/john-sharratt/mio.git", branch = "wasix", optional = true }
+socket2 = { git = "https://github.com/john-sharratt/socket2.git", branch = "wasix", optional = true, features = [ "all" ] }
 num_cpus = { version = "1.8.0", optional = true }
 parking_lot = { version = "0.12.0", optional = true }
-
-[target.'cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))'.dependencies]
-socket2 = { version = "0.4.4", features = [ "all" ] }
 
 # Currently unstable. The API exposed by these features may be broken at any time.
 # Requires `--cfg tokio_unstable` to enable.
 [target.'cfg(tokio_unstable)'.dependencies]
 tracing = { version = "0.1.25", default-features = false, features = ["std"], optional = true } # Not in full
 
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+libc = { git = "https://github.com/john-sharratt/libc.git", optional = true }
+
 [target.'cfg(unix)'.dependencies]
-libc = { version = "0.2.42", optional = true }
 signal-hook-registry = { version = "1.1.1", optional = true }
 
-[target.'cfg(unix)'.dev-dependencies]
-libc = { version = "0.2.42" }
+[target.'cfg(any(unix, target_os = "wasi"))'.dev-dependencies]
+libc = { git = "https://github.com/john-sharratt/libc.git" }
 nix = { version = "0.24", default-features = false, features = ["fs", "socket"] }
 
 [target.'cfg(windows)'.dependencies.winapi]
@@ -152,7 +153,7 @@ async-stream = "0.3"
 
 [target.'cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))'.dev-dependencies]
 proptest = "1"
-socket2 = "0.4"
+socket2 = { git = "https://github.com/john-sharratt/socket2.git", branch = "wasix" }
 
 [target.'cfg(not(all(any(target_arch = "wasm32", target_arch = "wasm64"), target_os = "unknown")))'.dev-dependencies]
 rand = "0.8.0"

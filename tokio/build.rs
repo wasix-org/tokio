@@ -94,6 +94,11 @@ fn main() {
         autocfg::emit("tokio_wasm");
         if target.contains("wasi") {
             autocfg::emit("tokio_wasi");
+            if target.contains("wasmer") {
+                autocfg::emit("tokio_wasix");
+            } else {
+                autocfg::emit("tokio_wasi_classic");
+            }
         } else {
             autocfg::emit("tokio_wasm_not_wasi");
         }

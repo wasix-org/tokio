@@ -51,6 +51,15 @@ mock! {
     impl std::os::unix::io::FromRawFd for File {
         unsafe fn from_raw_fd(h: std::os::unix::io::RawFd) -> Self;
     }
+
+    #[cfg(tokio_wasi)]
+    impl std::os::wasi::io::AsRawFd for File {
+        fn as_raw_fd(&self) -> std::os::wasi::io::RawFd;
+    }
+    #[cfg(tokio_wasi)]
+    impl std::os::wasi::io::FromRawFd for File {
+        unsafe fn from_raw_fd(h: std::os::unix::io::RawFd) -> Self;
+    }
 }
 
 impl Read for MockFile {

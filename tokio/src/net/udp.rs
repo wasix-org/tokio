@@ -249,6 +249,15 @@ impl UdpSocket {
                 .map(|raw_fd| unsafe { std::net::UdpSocket::from_raw_fd(raw_fd) })
         }
 
+        #[cfg(tokio_wasi)]
+        {
+            use std::os::wasi::io::{FromRawFd, IntoRawFd};
+            self.io
+                .into_inner()
+                .map(|io| io.into_raw_fd())
+                .map(|raw_fd| unsafe { std::net::UdpSocket::from_raw_fd(raw_fd) })
+        }
+
         #[cfg(windows)]
         {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
@@ -1649,7 +1658,7 @@ impl fmt::Debug for UdpSocket {
     }
 }
 
-#[cfg(all(unix))]
+#[cfg(any(unix, tokio_wasi))]
 mod sys {
     use super::UdpSocket;
     use std::os::unix::prelude::*;

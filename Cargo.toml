@@ -14,3 +14,8 @@ members = [
   "tests-build",
   "tests-integration",
 ]
+
+[patch.crates-io]
+libc = { git = "https://github.com/john-sharratt/libc.git" }
+# ring = { git = "https://github.com/john-sharratt/ring.git", branch = "v0.16.20" }
+mio = { git = "https://github.com/john-sharratt/mio.git", branch = "wasix" }

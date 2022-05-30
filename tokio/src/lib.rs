@@ -404,6 +404,8 @@ compile_error! {
     all(target_os = "wasi", not(tokio_wasm)),
     all(target_os = "wasi", not(tokio_wasi)),
     all(target_os = "wasi", tokio_wasm_not_wasi),
+    all(target_os = "wasi", target_vendor = "wasmer", not(tokio_wasix)),
+    all(target_os = "wasi", target_vendor = "unknown", tokio_wasix),
     all(tokio_wasm, not(any(target_arch = "wasm32", target_arch = "wasm64"))),
     all(tokio_wasm_not_wasi, not(tokio_wasm)),
     all(tokio_wasi, not(tokio_wasm))
@@ -412,7 +414,7 @@ compile_error!("Tokio's build script has incorrectly detected wasm.");
 
 #[cfg(all(
     not(tokio_unstable),
-    tokio_wasm,
+    all(tokio_wasm, not(tokio_wasix)),
     any(
         feature = "fs",
         feature = "io-std",

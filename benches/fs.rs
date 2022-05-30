@@ -1,4 +1,4 @@
-#![cfg(unix)]
+#![cfg(any(unix, target_os = "wasi"))]
 
 use tokio_stream::StreamExt;
 

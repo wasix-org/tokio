@@ -54,11 +54,15 @@ mod os {
     #[cfg(unix)]
     pub(crate) use super::unix::{OsExtraData, OsStorage};
 
+    #[cfg(tokio_wasi)]
+    pub(crate) use super::wasi::{OsExtraData, OsStorage};
+
     #[cfg(windows)]
     pub(crate) use super::windows::{OsExtraData, OsStorage};
 }
 
 pub mod unix;
+pub mod wasi;
 pub mod windows;
 
 mod reusable_box;
@@ -66,9 +70,11 @@ use self::reusable_box::ReusableBoxFuture;
 
 #[derive(Debug)]
 struct RxFuture {
+    #[cfg_attr(tokio_wasi, allow(dead_code))]
     inner: ReusableBoxFuture<Receiver<()>>,
 }
 
+#[cfg_attr(tokio_wasi, allow(dead_code))]
 async fn make_future(mut rx: Receiver<()>) -> Receiver<()> {
     match rx.changed().await {
         Ok(()) => rx,
@@ -77,17 +83,20 @@ async fn make_future(mut rx: Receiver<()>) -> Receiver<()> {
 }
 
 impl RxFuture {
+    #[cfg_attr(tokio_wasi, allow(dead_code))]
     fn new(rx: Receiver<()>) -> Self {
         Self {
             inner: ReusableBoxFuture::new(make_future(rx)),
         }
     }
 
+    #[cfg_attr(tokio_wasi, allow(dead_code))]
     async fn recv(&mut self) -> Option<()> {
         use crate::future::poll_fn;
         poll_fn(|cx| self.poll_recv(cx)).await
     }
 
+    #[cfg_attr(tokio_wasi, allow(dead_code))]
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<()>> {
         match self.inner.poll(cx) {
             Poll::Pending => Poll::Pending,

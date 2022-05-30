@@ -1,6 +1,6 @@
 pub(crate) use self::sys::*;
 
-#[cfg(unix)]
+#[cfg(any(unix, tokio_wasi))]
 mod sys {
     use mio::unix::UnixReady;
     use mio::Ready;

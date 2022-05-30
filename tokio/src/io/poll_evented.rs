@@ -119,8 +119,8 @@ impl<E: Source> PollEvented<E> {
     /// Returns a reference to the registration.
     #[cfg(any(
         feature = "net",
-        all(unix, feature = "process"),
-        all(unix, feature = "signal"),
+        all(any(unix, tokio_wasix), feature = "process"),
+        all(any(unix, tokio_wasix), feature = "signal"),
     ))]
     pub(crate) fn registration(&self) -> &Registration {
         &self.registration
@@ -136,7 +136,7 @@ impl<E: Source> PollEvented<E> {
 }
 
 feature! {
-    #![any(feature = "net", all(unix, feature = "process"))]
+    #![any(feature = "net", all(any(unix, tokio_wasix), feature = "process"))]
 
     use crate::io::ReadBuf;
     use std::task::{Context, Poll};

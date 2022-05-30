@@ -1,4 +1,5 @@
 #![allow(clippy::unit_arg)]
+#![cfg_attr(tokio_wasi, allow(dead_code))]
 
 use crate::signal::os::{OsExtraData, OsStorage};
 

@@ -12,8 +12,8 @@ bencher = "0.1.5"
 tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
 tokio-stream = { path = "../tokio-stream" }
 
-[target.'cfg(unix)'.dependencies]
-libc = "0.2.42"
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+libc = { git = "https://github.com/john-sharratt/libc.git" }
 
 [[bench]]
 name = "spawn"

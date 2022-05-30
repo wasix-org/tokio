@@ -63,6 +63,24 @@ cfg_signal_internal_and_unix! {
     }
 }
 
+macro_rules! cfg_signal_internal_and_wasi {
+    ($($item:item)*) => {
+        #[cfg(tokio_wasi)]
+        cfg_signal_internal! { $($item)* }
+    }
+}
+
+cfg_signal_internal_and_wasi! {
+    type SignalDriver = crate::signal::wasi::driver::Driver;
+    pub(crate) type SignalHandle = Option<crate::signal::wasi::driver::Handle>;
+
+    fn create_signal_driver(io_driver: IoDriver) -> io::Result<(SignalDriver, SignalHandle)> {
+        let driver = crate::signal::wasi::driver::Driver::new(io_driver)?;
+        let handle = driver.handle();
+        Ok((driver, Some(handle)))
+    }
+}
+
 cfg_not_signal_internal! {
     pub(crate) type SignalHandle = ();
 
@@ -77,11 +95,21 @@ cfg_not_signal_internal! {
 
 // ===== process driver =====
 
+#[cfg(unix)]
 cfg_process_driver! {
     type ProcessDriver = crate::process::unix::driver::Driver;
 
     fn create_process_driver(signal_driver: SignalDriver) -> ProcessDriver {
         crate::process::unix::driver::Driver::new(signal_driver)
+    }
+}
+
+#[cfg(tokio_wasi)]
+cfg_process_driver! {
+    type ProcessDriver = crate::process::wasi::driver::Driver;
+
+    fn create_process_driver(signal_driver: SignalDriver) -> ProcessDriver {
+        crate::process::wasi::driver::Driver::new(signal_driver)
     }
 }
 

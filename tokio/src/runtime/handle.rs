@@ -25,8 +25,8 @@ pub(crate) struct HandleInner {
     #[cfg_attr(
         not(any(
             feature = "net",
-            all(unix, feature = "process"),
-            all(unix, feature = "signal"),
+            all(any(unix, tokio_wasix), feature = "process"),
+            all(any(unix, tokio_wasix), feature = "signal"),
         )),
         allow(dead_code)
     )]

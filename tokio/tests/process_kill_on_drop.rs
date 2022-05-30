@@ -1,4 +1,4 @@
-#![cfg(all(unix, feature = "process"))]
+#![cfg(all(any(unix, tokio_wasix), feature = "process"))]
 #![warn(rust_2018_idioms)]
 
 use std::io::ErrorKind;

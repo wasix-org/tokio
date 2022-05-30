@@ -731,6 +731,20 @@ impl std::os::unix::io::FromRawFd for File {
     }
 }
 
+#[cfg(tokio_wasi)]
+impl std::os::wasi::io::AsRawFd for File {
+    fn as_raw_fd(&self) -> std::os::wasi::io::RawFd {
+        self.std.as_raw_fd()
+    }
+}
+
+#[cfg(tokio_wasi)]
+impl std::os::wasi::io::FromRawFd for File {
+    unsafe fn from_raw_fd(fd: std::os::wasi::io::RawFd) -> Self {
+        StdFile::from_raw_fd(fd).into()
+    }
+}
+
 #[cfg(windows)]
 impl std::os::windows::io::AsRawHandle for File {
     fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {

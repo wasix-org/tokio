@@ -1,3 +1,4 @@
+#![cfg_attr(tokio_wasi, allow(dead_code))]
 use std::alloc::Layout;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;

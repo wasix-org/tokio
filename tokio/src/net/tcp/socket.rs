@@ -6,6 +6,8 @@ use std::net::SocketAddr;
 
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+#[cfg(tokio_wasi)]
+use std::os::wasi::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket};
 use std::time::Duration;
@@ -264,10 +266,10 @@ impl TcpSocket {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
+    #[cfg(all(any(unix, tokio_wasix), not(target_os = "solaris"), not(target_os = "illumos")))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos"))))
+        doc(cfg(all(any(unix, tokio_wasix), not(target_os = "solaris"), not(target_os = "illumos"))))
     )]
     pub fn set_reuseport(&self, reuseport: bool) -> io::Result<()> {
         self.inner.set_reuse_port(reuseport)
@@ -299,10 +301,10 @@ impl TcpSocket {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
+    #[cfg(all(any(unix, tokio_wasix), not(target_os = "solaris"), not(target_os = "illumos")))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos"))))
+        doc(cfg(all(any(unix, tokio_wasix), not(target_os = "solaris"), not(target_os = "illumos"))))
     )]
     pub fn reuseport(&self) -> io::Result<bool> {
         self.inner.reuse_port()
@@ -554,6 +556,10 @@ impl TcpSocket {
             if err.raw_os_error() != Some(libc::EINPROGRESS) {
                 return Err(err);
             }
+            #[cfg(tokio_wasi)]
+            if err.raw_os_error() != Some(libc::EINPROGRESS) {
+                return Err(err);
+            }
             #[cfg(windows)]
             if err.kind() != io::ErrorKind::WouldBlock {
                 return Err(err);
@@ -562,6 +568,14 @@ impl TcpSocket {
         #[cfg(unix)]
         let mio = {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
+
+            let raw_fd = self.inner.into_raw_fd();
+            unsafe { mio::net::TcpStream::from_raw_fd(raw_fd) }
+        };
+
+        #[cfg(tokio_wasi)]
+        let mio = {
+            use std::os::wasi::io::{FromRawFd, IntoRawFd};
 
             let raw_fd = self.inner.into_raw_fd();
             unsafe { mio::net::TcpStream::from_raw_fd(raw_fd) }
@@ -623,6 +637,14 @@ impl TcpSocket {
             unsafe { mio::net::TcpListener::from_raw_fd(raw_fd) }
         };
 
+        #[cfg(tokio_wasi)]
+        let mio = {
+            use std::os::wasi::io::{FromRawFd, IntoRawFd};
+
+            let raw_fd = self.inner.into_raw_fd();
+            unsafe { mio::net::TcpListener::from_raw_fd(raw_fd) }
+        };
+
         #[cfg(windows)]
         let mio = {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
@@ -667,6 +689,14 @@ impl TcpSocket {
             unsafe { TcpSocket::from_raw_fd(raw_fd) }
         }
 
+        #[cfg(tokio_wasi)]
+        {
+            use std::os::wasi::io::{FromRawFd, IntoRawFd};
+
+            let raw_fd = std_stream.into_raw_fd();
+            unsafe { TcpSocket::from_raw_fd(raw_fd) }
+        }
+
         #[cfg(windows)]
         {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
@@ -693,14 +723,14 @@ impl fmt::Debug for TcpSocket {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, tokio_wasi))]
 impl AsRawFd for TcpSocket {
     fn as_raw_fd(&self) -> RawFd {
         self.inner.as_raw_fd()
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, tokio_wasi))]
 impl FromRawFd for TcpSocket {
     /// Converts a `RawFd` to a `TcpSocket`.
     ///
@@ -714,7 +744,7 @@ impl FromRawFd for TcpSocket {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, tokio_wasi))]
 impl IntoRawFd for TcpSocket {
     fn into_raw_fd(self) -> RawFd {
         self.inner.into_raw_fd()

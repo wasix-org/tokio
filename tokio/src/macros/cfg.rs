@@ -61,7 +61,7 @@ macro_rules! cfg_fs {
     ($($item:item)*) => {
         $(
             #[cfg(feature = "fs")]
-            #[cfg(not(tokio_wasi))]
+            #[cfg(not(tokio_wasi_classic))]
             #[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
             $item
         )*
@@ -83,13 +83,13 @@ macro_rules! cfg_io_driver {
         $(
             #[cfg(any(
                 feature = "net",
-                all(unix, feature = "process"),
-                all(unix, feature = "signal"),
+                all(any(unix, tokio_wasix), feature = "process"),
+                all(any(unix, tokio_wasix), feature = "signal"),
             ))]
             #[cfg_attr(docsrs, doc(cfg(any(
                 feature = "net",
-                all(unix, feature = "process"),
-                all(unix, feature = "signal"),
+                all(any(unix, tokio_wasix), feature = "process"),
+                all(any(unix, tokio_wasix), feature = "signal"),
             ))))]
             $item
         )*
@@ -101,8 +101,8 @@ macro_rules! cfg_io_driver_impl {
         $(
             #[cfg(any(
                 feature = "net",
-                all(unix, feature = "process"),
-                all(unix, feature = "signal"),
+                all(any(unix, tokio_wasix), feature = "process"),
+                all(any(unix, tokio_wasix), feature = "signal"),
             ))]
             $item
         )*
@@ -114,8 +114,8 @@ macro_rules! cfg_not_io_driver {
         $(
             #[cfg(not(any(
                 feature = "net",
-                all(unix, feature = "process"),
-                all(unix, feature = "signal"),
+                all(any(unix, tokio_wasix), feature = "process"),
+                all(any(unix, tokio_wasix), feature = "signal"),
             )))]
             $item
         )*
@@ -236,6 +236,16 @@ macro_rules! cfg_net_unix {
     }
 }
 
+macro_rules! cfg_net_wasix {
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(tokio_wasix, feature = "net"))]
+            #[cfg_attr(docsrs, doc(cfg(all(tokio_wasix, feature = "net"))))]
+            $item
+        )*
+    }
+}
+
 macro_rules! cfg_net_windows {
     ($($item:item)*) => {
         $(
@@ -252,7 +262,7 @@ macro_rules! cfg_process {
             #[cfg(feature = "process")]
             #[cfg_attr(docsrs, doc(cfg(feature = "process")))]
             #[cfg(not(loom))]
-            #[cfg(not(tokio_wasi))]
+            #[cfg(not(tokio_wasi_classic))]
             $item
         )*
     }
@@ -260,7 +270,7 @@ macro_rules! cfg_process {
 
 macro_rules! cfg_process_driver {
     ($($item:item)*) => {
-        #[cfg(unix)]
+        #[cfg(any(unix, tokio_wasi))]
         #[cfg(not(loom))]
         cfg_process! { $($item)* }
     }
@@ -269,7 +279,7 @@ macro_rules! cfg_process_driver {
 macro_rules! cfg_not_process_driver {
     ($($item:item)*) => {
         $(
-            #[cfg(not(all(unix, not(loom), feature = "process")))]
+            #[cfg(not(all(any(unix, tokio_wasi), not(loom), feature = "process")))]
             $item
         )*
     }
@@ -281,7 +291,7 @@ macro_rules! cfg_signal {
             #[cfg(feature = "signal")]
             #[cfg_attr(docsrs, doc(cfg(feature = "signal")))]
             #[cfg(not(loom))]
-            #[cfg(not(tokio_wasi))]
+            #[cfg(not(tokio_wasi_classic))]
             $item
         )*
     }
@@ -290,7 +300,7 @@ macro_rules! cfg_signal {
 macro_rules! cfg_signal_internal {
     ($($item:item)*) => {
         $(
-            #[cfg(any(feature = "signal", all(unix, feature = "process")))]
+            #[cfg(any(feature = "signal", all(any(unix, tokio_wasix), feature = "process")))]
             #[cfg(not(loom))]
             $item
         )*
@@ -300,7 +310,7 @@ macro_rules! cfg_signal_internal {
 macro_rules! cfg_not_signal_internal {
     ($($item:item)*) => {
         $(
-            #[cfg(any(loom, not(unix), not(any(feature = "signal", all(unix, feature = "process")))))]
+            #[cfg(any(loom, not(any(unix, tokio_wasi)), not(any(feature = "signal", all(any(unix, tokio_wasix), feature = "process")))))]
             $item
         )*
     }
@@ -341,7 +351,7 @@ macro_rules! cfg_not_rt {
 macro_rules! cfg_rt_multi_thread {
     ($($item:item)*) => {
         $(
-            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
             #[cfg_attr(docsrs, doc(cfg(feature = "rt-multi-thread")))]
             $item
         )*
@@ -485,6 +495,24 @@ macro_rules! cfg_not_wasi {
     ($($item:item)*) => {
         $(
             #[cfg(not(tokio_wasi))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_wasi_classic {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(tokio_wasi_classic))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_wasix {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(tokio_wasix))]
             $item
         )*
     }

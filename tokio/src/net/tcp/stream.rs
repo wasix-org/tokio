@@ -1,4 +1,4 @@
-cfg_not_wasi! {
+cfg_not_wasi_classic! {
     use crate::future::poll_fn;
     use crate::net::{to_socket_addrs, ToSocketAddrs};
     use std::time::Duration;
@@ -73,7 +73,7 @@ cfg_net! {
 }
 
 impl TcpStream {
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Opens a TCP connection to a remote host.
         ///
         /// `addr` is an address of the remote host. Anything which implements the
@@ -1093,7 +1093,7 @@ impl TcpStream {
         self.io.set_nodelay(nodelay)
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Reads the linger duration for this socket by getting the `SO_LINGER`
         /// option.
         ///
@@ -1334,7 +1334,7 @@ mod sys {
     }
 }
 
-#[cfg(all(tokio_unstable, tokio_wasi))]
+#[cfg(all(tokio_wasi))]
 mod sys {
     use super::TcpStream;
     use std::os::wasi::prelude::*;
