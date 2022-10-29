@@ -11,6 +11,8 @@ use std::time::Duration;
 
 #[derive(Debug)]
 pub(crate) struct Driver {
+    /// Thread parker. The `Driver` park implementation delegates to this.
+    park: IoDriver,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -21,11 +23,20 @@ pub(crate) struct Handle {
 
 impl Driver {
     pub(crate) fn new(park: IoDriver) -> io::Result<Self> {
-        unimplemented!();
+        Ok(
+            Self {
+                park
+            }
+        )
     }
 
     pub(crate) fn handle(&self) -> Handle {
-        unimplemented!();
+        Handle {
+        }
+    }
+
+    fn process(&self) {
+        std::thread::yield_now();
     }
 }
 
@@ -34,18 +45,26 @@ impl Park for Driver {
     type Error = io::Error;
 
     fn unpark(&self) -> Self::Unpark {
-        unimplemented!();
+        self.park.unpark()
     }
 
     fn park(&mut self) -> Result<(), Self::Error> {
-        unimplemented!();
+        if let Err(err) = self.park.park() {
+            std::thread::yield_now();
+        }
+        self.process();
+        Ok(())
     }
 
     fn park_timeout(&mut self, duration: Duration) -> Result<(), Self::Error> {
-        unimplemented!();
+        if let Err(err) = self.park.park_timeout(duration) {
+            std::thread::yield_now();
+        }
+        self.process();
+        Ok(())
     }
 
     fn shutdown(&mut self) {
-        unimplemented!();
+        self.park.shutdown()
     }
 }
