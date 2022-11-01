@@ -5,6 +5,7 @@
 
 use crate::io::driver::{Driver as IoDriver};
 use crate::park::Park;
+use crate::signal::registry::globals;
 
 use std::io::{self};
 use std::time::Duration;
@@ -23,22 +24,25 @@ pub(crate) struct Handle {
 
 impl Driver {
     pub(crate) fn new(park: IoDriver) -> io::Result<Self> {
-        Ok(
-            Self {
-                park
-            }
-        )
+        Ok(Self {
+            park,
+        })
     }
 
+    /// Returns a handle to this event loop which can be sent across threads
+    /// and can be used as a proxy to the event loop itself.
     pub(crate) fn handle(&self) -> Handle {
         Handle {
         }
     }
 
     fn process(&self) {
-        std::thread::yield_now();
+        // Broadcast any signals which were received
+        globals().broadcast();
     }
 }
+
+// ===== impl Park for Driver =====
 
 impl Park for Driver {
     type Unpark = <IoDriver as Park>::Unpark;
@@ -49,17 +53,13 @@ impl Park for Driver {
     }
 
     fn park(&mut self) -> Result<(), Self::Error> {
-        if let Err(err) = self.park.park() {
-            std::thread::yield_now();
-        }
+        self.park.park()?;
         self.process();
         Ok(())
     }
 
     fn park_timeout(&mut self, duration: Duration) -> Result<(), Self::Error> {
-        if let Err(err) = self.park.park_timeout(duration) {
-            std::thread::yield_now();
-        }
+        self.park.park_timeout(duration)?;
         self.process();
         Ok(())
     }

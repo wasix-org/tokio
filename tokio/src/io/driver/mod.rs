@@ -93,6 +93,7 @@ enum Tick {
 // TODO: Don't use a fake token. Instead, reserve a slot entry for the wakeup
 // token.
 const TOKEN_WAKEUP: mio::Token = mio::Token(1 << 31);
+const TOKEN_NOOP: mio::Token = mio::Token(4294967295);
 
 const ADDRESS: bit::Pack = bit::Pack::least_significant(24);
 
@@ -181,7 +182,8 @@ impl Driver {
         for event in events.iter() {
             let token = event.token();
 
-            if token != TOKEN_WAKEUP {
+            if token != TOKEN_WAKEUP &&
+               token != TOKEN_NOOP {
                 self.dispatch(token, Ready::from_mio(event));
                 ready_count += 1;
             }
