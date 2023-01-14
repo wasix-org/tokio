@@ -268,10 +268,8 @@ impl UdpSocket {
         }
     }
 
-    cfg_not_wasi! {
-        fn as_socket(&self) -> socket2::SockRef<'_> {
-            socket2::SockRef::from(self)
-        }
+    fn as_socket(&self) -> socket2::SockRef<'_> {
+        socket2::SockRef::from(self)
     }
 
     /// Returns the local address that this socket is bound to.
@@ -1525,61 +1523,59 @@ impl UdpSocket {
         self.io.set_ttl(ttl)
     }
 
-    cfg_not_wasi! {
-        /// Gets the value of the `IP_TOS` option for this socket.
-        ///
-        /// For more information about this option, see [`set_tos`].
-        ///
-        /// **NOTE:** On Windows, `IP_TOS` is only supported on [Windows 8+ or
-        /// Windows Server 2012+.](https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)
-        ///
-        /// [`set_tos`]: Self::set_tos
-        // https://docs.rs/socket2/0.4.2/src/socket2/socket.rs.html#1178
-        #[cfg(not(any(
+    /// Gets the value of the `IP_TOS` option for this socket.
+    ///
+    /// For more information about this option, see [`set_tos`].
+    ///
+    /// **NOTE:** On Windows, `IP_TOS` is only supported on [Windows 8+ or
+    /// Windows Server 2012+.](https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)
+    ///
+    /// [`set_tos`]: Self::set_tos
+    // https://docs.rs/socket2/0.4.2/src/socket2/socket.rs.html#1178
+    #[cfg(not(any(
+        target_os = "fuchsia",
+        target_os = "redox",
+        target_os = "solaris",
+        target_os = "illumos",
+    )))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(not(any(
             target_os = "fuchsia",
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-        )))]
-        #[cfg_attr(
-            docsrs,
-            doc(cfg(not(any(
-                target_os = "fuchsia",
-                target_os = "redox",
-                target_os = "solaris",
-                target_os = "illumos",
-            ))))
-        )]
-        pub fn tos(&self) -> io::Result<u32> {
-            self.as_socket().tos()
-        }
+        ))))
+    )]
+    pub fn tos(&self) -> io::Result<u32> {
+        self.as_socket().tos()
+    }
 
-        /// Sets the value for the `IP_TOS` option on this socket.
-        ///
-        /// This value sets the time-to-live field that is used in every packet sent
-        /// from this socket.
-        ///
-        /// **NOTE:** On Windows, `IP_TOS` is only supported on [Windows 8+ or
-        /// Windows Server 2012+.](https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)
-        // https://docs.rs/socket2/0.4.2/src/socket2/socket.rs.html#1178
-        #[cfg(not(any(
+    /// Sets the value for the `IP_TOS` option on this socket.
+    ///
+    /// This value sets the time-to-live field that is used in every packet sent
+    /// from this socket.
+    ///
+    /// **NOTE:** On Windows, `IP_TOS` is only supported on [Windows 8+ or
+    /// Windows Server 2012+.](https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)
+    // https://docs.rs/socket2/0.4.2/src/socket2/socket.rs.html#1178
+    #[cfg(not(any(
+        target_os = "fuchsia",
+        target_os = "redox",
+        target_os = "solaris",
+        target_os = "illumos",
+    )))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(not(any(
             target_os = "fuchsia",
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-        )))]
-        #[cfg_attr(
-            docsrs,
-            doc(cfg(not(any(
-                target_os = "fuchsia",
-                target_os = "redox",
-                target_os = "solaris",
-                target_os = "illumos",
-            ))))
-        )]
-        pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-            self.as_socket().set_tos(tos)
-        }
+        ))))
+    )]
+    pub fn set_tos(&self, tos: u32) -> io::Result<()> {
+        self.as_socket().set_tos(tos)
     }
 
     /// Executes an operation of the `IP_ADD_MEMBERSHIP` type.
@@ -1671,6 +1667,12 @@ mod sys {
         fn as_raw_fd(&self) -> RawFd {
             self.io.as_raw_fd()
         }
+    }
+
+    impl AsFd for UdpSocket {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.io.as_raw_fd()) }
+        }   
     }
 }
 

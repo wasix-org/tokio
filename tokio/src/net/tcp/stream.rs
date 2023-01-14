@@ -1,8 +1,6 @@
 cfg_not_wasi_classic! {
     use crate::future::poll_fn;
     use crate::net::{to_socket_addrs, ToSocketAddrs};
-}
-cfg_not_wasi! {
     use std::time::Duration;
 }
 
@@ -1095,7 +1093,7 @@ impl TcpStream {
         self.io.set_nodelay(nodelay)
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Reads the linger duration for this socket by getting the `SO_LINGER`
         /// option.
         ///
@@ -1322,6 +1320,12 @@ mod sys {
             self.io.as_raw_fd()
         }
     }
+
+    impl AsFd for TcpStream {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.io.as_raw_fd()) }
+        }   
+    }
 }
 
 #[cfg(windows)]
@@ -1345,5 +1349,11 @@ mod sys {
         fn as_raw_fd(&self) -> RawFd {
             self.io.as_raw_fd()
         }
+    }
+
+    impl AsFd for TcpStream {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.io.as_raw_fd()) }
+        }   
     }
 }
