@@ -441,7 +441,7 @@ cfg_sync! {
     pub mod mpsc;
 
     mod mutex;
-    pub use mutex::{Mutex, MutexGuard, TryLockError, OwnedMutexGuard, MappedMutexGuard};
+    pub use mutex::{Mutex, MutexGuard, OwnedMutexGuard, MappedMutexGuard};
 
     pub(crate) mod notify;
     pub use notify::Notify;

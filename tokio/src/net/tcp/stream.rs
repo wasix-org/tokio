@@ -1,6 +1,8 @@
 cfg_not_wasi_classic! {
     use crate::future::poll_fn;
     use crate::net::{to_socket_addrs, ToSocketAddrs};
+}
+cfg_not_wasi! {
     use std::time::Duration;
 }
 
@@ -1093,7 +1095,7 @@ impl TcpStream {
         self.io.set_nodelay(nodelay)
     }
 
-    cfg_not_wasi_classic! {
+    cfg_not_wasi! {
         /// Reads the linger duration for this socket by getting the `SO_LINGER`
         /// option.
         ///
