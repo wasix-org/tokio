@@ -739,7 +739,6 @@ impl UnixStream {
     #[cfg(tokio_wasix)]
     #[track_caller]
     pub fn from_std(stream: std::os::unix::net::UnixStream) -> io::Result<UnixStream> {
-        stream.set_nonblocking(true)?;
         let io = crate::fs::File::from_std(unsafe { std::fs::File::from_raw_fd(stream.into_raw_fd()) });
         Ok(UnixStream { io })
     }
