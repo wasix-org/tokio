@@ -45,9 +45,12 @@ cfg_net! {
 }
 
 cfg_net_unix! {
-    pub mod unix;
     pub use unix::datagram::socket::UnixDatagram;
     pub use unix::listener::UnixListener;
+}
+
+cfg_net_unix_or_wasix! {
+    pub mod unix;
     pub use unix::stream::UnixStream;
 }
 

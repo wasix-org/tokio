@@ -236,6 +236,16 @@ macro_rules! cfg_net_unix {
     }
 }
 
+macro_rules! cfg_net_unix_or_wasix {
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(any(unix, tokio_wasix), feature = "net"))]
+            #[cfg_attr(docsrs, doc(cfg(all(any(unix, tokio_wasix), feature = "net"))))]
+            $item
+        )*
+    }
+}
+
 macro_rules! cfg_net_wasix {
     ($($item:item)*) => {
         $(
