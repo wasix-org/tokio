@@ -163,6 +163,7 @@ feature! {
                     Ok(n) => {
                         // if we read a partially full buffer, this is sufficient on unix to show
                         // that the socket buffer has been drained
+                        #[cfg(not(target_os = "wasi"))]
                         if n > 0 && (!cfg!(windows) && n < len) {
                             self.registration.clear_readiness(evt);
                         }
