@@ -157,6 +157,7 @@ feature! {
                 let evt = ready!(self.registration.poll_read_ready(cx))?;
 
                 let b = &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]);
+                #[cfg(not(target_os = "wasi"))]
                 let len = b.len();
 
                 match self.io.as_ref().unwrap().read(b) {
