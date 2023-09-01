@@ -42,7 +42,7 @@ cfg_net_unix! {
 
 cfg_net_wasix! {
     pub struct UnixStream {
-        pub(crate) io: crate::fs::File,
+        pub(crate) io: crate::std::fs::File,
     }
 }
 
@@ -138,7 +138,7 @@ impl UnixStream {
     ///     }
     /// }
     /// ```
-    /// 
+    ///
     #[cfg(unix)]
     pub async fn ready(&self, interest: Interest) -> io::Result<Ready> {
         let event = self.io.registration().readiness(interest).await?;
@@ -740,7 +740,9 @@ impl UnixStream {
     #[track_caller]
     pub fn from_std(stream: std::os::unix::net::UnixStream) -> io::Result<UnixStream> {
         stream.set_nonblocking(true)?;
-        let io = crate::fs::File::from_std(unsafe { std::fs::File::from_raw_fd(stream.into_raw_fd()) });
+        let io = crate::std::fs::File::from_std(unsafe {
+            std::fs::File::from_raw_fd(stream.into_raw_fd())
+        });
         Ok(UnixStream { io })
     }
 
@@ -1011,7 +1013,10 @@ impl AsyncWrite for UnixStream {
         Pin::new(&mut self.io).poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.io).poll_shutdown(cx)
     }
 }
