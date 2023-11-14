@@ -834,15 +834,15 @@ impl AsRawFd for TcpSocket {
     }
 }
 
-// #[cfg(all(unix, not(tokio_no_as_fd)))] ⚠️ Didn't understand this flag
-#[cfg(any(unix, tokio_wasi))]
+// #[cfg(any(unix, tokio_wasi))]
+#[cfg(all(unix, not(tokio_no_as_fd)))]
 impl AsFd for TcpSocket {
     fn as_fd(&self) -> BorrowedFd<'_> {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, tokio_wasi))]
 impl FromRawFd for TcpSocket {
     /// Converts a `RawFd` to a `TcpSocket`.
     ///
