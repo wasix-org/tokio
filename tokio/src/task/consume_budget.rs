@@ -33,10 +33,11 @@ pub async fn consume_budget() {
     let mut status = Poll::Pending;
 
     crate::future::poll_fn(move |cx| {
+        ready!(crate::trace::trace_leaf(cx));
         if status.is_ready() {
             return status;
         }
-        status = crate::coop::poll_proceed(cx).map(|restore| {
+        status = crate::runtime::coop::poll_proceed(cx).map(|restore| {
             restore.made_progress();
         });
         status

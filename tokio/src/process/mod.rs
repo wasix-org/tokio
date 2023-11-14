@@ -156,7 +156,6 @@
 //! ```no_run
 //! use tokio::join;
 //! use tokio::process::Command;
-//! use std::convert::TryInto;
 //! use std::process::Stdio;
 //!
 //! #[tokio::main]
@@ -217,7 +216,7 @@
 //! from being spawned.
 //!
 //! The tokio runtime will, on a best-effort basis, attempt to reap and clean up
-//! any process which it has spawned. No additional guarantees are made with regards
+//! any process which it has spawned. No additional guarantees are made with regard to
 //! how quickly or how often this procedure will take place.
 //!
 //! It is recommended to avoid dropping a [`Child`] process handle before it has been
@@ -254,21 +253,25 @@ mod kill;
 use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::process::kill::Kill;
 
-use std::convert::TryInto;
 use std::ffi::OsStr;
 use std::future::Future;
 use std::io;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-#[cfg(windows)]
-use std::os::windows::io::{AsRawHandle, RawHandle};
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::pin::Pin;
 use std::process::{Command as StdCommand, ExitStatus, Output, Stdio};
 use std::task::Context;
 use std::task::Poll;
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+cfg_windows! {
+    use crate::os::windows::io::{AsRawHandle, RawHandle};
+    #[cfg(not(tokio_no_as_fd))]
+    use crate::os::windows::io::{AsHandle, BorrowedHandle};
+}
 
 /// This structure mimics the API of [`std::process::Command`] found in the standard library, but
 /// replaces functions that create a process with an asynchronous variant. The main provided
@@ -318,7 +321,8 @@ impl Command {
     ///
     /// ```no_run
     /// use tokio::process::Command;
-    /// let command = Command::new("sh");
+    /// let mut command = Command::new("sh");
+    /// # let _ = command.output(); // assert borrow checker
     /// ```
     ///
     /// [rust-lang/rust#37519]: https://github.com/rust-lang/rust/issues/37519
@@ -337,16 +341,20 @@ impl Command {
     /// Only one argument can be passed per use. So instead of:
     ///
     /// ```no_run
-    /// tokio::process::Command::new("sh")
-    ///   .arg("-C /path/to/repo");
+    /// let mut command = tokio::process::Command::new("sh");
+    /// command.arg("-C /path/to/repo");
+    ///
+    /// # let _ = command.output(); // assert borrow checker
     /// ```
     ///
     /// usage would be:
     ///
     /// ```no_run
-    /// tokio::process::Command::new("sh")
-    ///   .arg("-C")
-    ///   .arg("/path/to/repo");
+    /// let mut command = tokio::process::Command::new("sh");
+    /// command.arg("-C");
+    /// command.arg("/path/to/repo");
+    ///
+    /// # let _ = command.output(); // assert borrow checker
     /// ```
     ///
     /// To pass multiple arguments see [`args`].
@@ -358,11 +366,15 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
+    /// let output = Command::new("ls")
     ///         .arg("-l")
-    ///         .arg("-a");
+    ///         .arg("-a")
+    ///         .output().await.unwrap();
+    /// # }
+    ///
     /// ```
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Command {
         self.std.arg(arg);
@@ -380,10 +392,13 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .args(&["-l", "-a"]);
+    /// let output = Command::new("ls")
+    ///         .args(&["-l", "-a"])
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn args<I, S>(&mut self, args: I) -> &mut Command
     where
@@ -391,6 +406,22 @@ impl Command {
         S: AsRef<OsStr>,
     {
         self.std.args(args);
+        self
+    }
+
+    /// Append literal text to the command line without any quoting or escaping.
+    ///
+    /// This is useful for passing arguments to `cmd.exe /c`, which doesn't follow
+    /// `CommandLineToArgvW` escaping rules.
+    ///
+    /// **Note**: This is an [unstable API][unstable] but will be stabilised once
+    /// tokio's MSRV is sufficiently new. See [the documentation on
+    /// unstable features][unstable] for details about using unstable features.
+    #[cfg(windows)]
+    #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(all(windows, tokio_unstable))))]
+    pub fn raw_arg<S: AsRef<OsStr>>(&mut self, text_to_append_as_is: S) -> &mut Command {
+        self.std.raw_arg(text_to_append_as_is);
         self
     }
 
@@ -404,10 +435,13 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .env("PATH", "/bin");
+    /// let output = Command::new("ls")
+    ///         .env("PATH", "/bin")
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn env<K, V>(&mut self, key: K, val: V) -> &mut Command
     where
@@ -425,6 +459,7 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     /// use std::process::{Stdio};
     /// use std::env;
@@ -435,11 +470,13 @@ impl Command {
     ///         k == "TERM" || k == "TZ" || k == "LANG" || k == "PATH"
     ///     ).collect();
     ///
-    /// let command = Command::new("printenv")
+    /// let output = Command::new("printenv")
     ///         .stdin(Stdio::null())
     ///         .stdout(Stdio::inherit())
     ///         .env_clear()
-    ///         .envs(&filtered_env);
+    ///         .envs(&filtered_env)
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn envs<I, K, V>(&mut self, vars: I) -> &mut Command
     where
@@ -458,10 +495,13 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .env_remove("PATH");
+    /// let output = Command::new("ls")
+    ///         .env_remove("PATH")
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn env_remove<K: AsRef<OsStr>>(&mut self, key: K) -> &mut Command {
         self.std.env_remove(key);
@@ -475,10 +515,13 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .env_clear();
+    /// let output = Command::new("ls")
+    ///         .env_clear()
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn env_clear(&mut self) -> &mut Command {
         self.std.env_clear();
@@ -502,10 +545,13 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .current_dir("/bin");
+    /// let output = Command::new("ls")
+    ///         .current_dir("/bin")
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Command {
         self.std.current_dir(dir);
@@ -525,11 +571,14 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use std::process::{Stdio};
     /// use tokio::process::Command;
     ///
-    /// let command = Command::new("ls")
-    ///         .stdin(Stdio::null());
+    /// let output = Command::new("ls")
+    ///         .stdin(Stdio::null())
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn stdin<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
         self.std.stdin(cfg);
@@ -549,11 +598,14 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     /// use std::process::Stdio;
     ///
-    /// let command = Command::new("ls")
-    ///         .stdout(Stdio::null());
+    /// let output = Command::new("ls")
+    ///         .stdout(Stdio::null())
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn stdout<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
         self.std.stdout(cfg);
@@ -573,11 +625,14 @@ impl Command {
     /// Basic usage:
     ///
     /// ```no_run
+    /// # async fn test() { // allow using await
     /// use tokio::process::Command;
     /// use std::process::{Stdio};
     ///
-    /// let command = Command::new("ls")
-    ///         .stderr(Stdio::null());
+    /// let output = Command::new("ls")
+    ///         .stderr(Stdio::null())
+    ///         .output().await.unwrap();
+    /// # }
     /// ```
     pub fn stderr<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
         self.std.stderr(cfg);
@@ -604,7 +659,7 @@ impl Command {
     /// operation, the resulting zombie process cannot be `.await`ed inside of the
     /// destructor to avoid blocking other tasks. The tokio runtime will, on a
     /// best-effort basis, attempt to reap and clean up such processes in the
-    /// background, but makes no additional guarantees are made with regards
+    /// background, but no additional guarantees are made with regard to
     /// how quickly or how often this procedure will take place.
     ///
     /// If stronger guarantees are required, it is recommended to avoid dropping
@@ -615,16 +670,16 @@ impl Command {
         self
     }
 
-    /// Sets the [process creation flags][1] to be passed to `CreateProcess`.
-    ///
-    /// These will always be ORed with `CREATE_UNICODE_ENVIRONMENT`.
-    ///
-    /// [1]: https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
-    #[cfg(windows)]
-    #[cfg_attr(docsrs, doc(cfg(windows)))]
-    pub fn creation_flags(&mut self, flags: u32) -> &mut Command {
-        self.std.creation_flags(flags);
-        self
+    cfg_windows! {
+        /// Sets the [process creation flags][1] to be passed to `CreateProcess`.
+        ///
+        /// These will always be ORed with `CREATE_UNICODE_ENVIRONMENT`.
+        ///
+        /// [1]: https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
+        pub fn creation_flags(&mut self, flags: u32) -> &mut Command {
+            self.std.creation_flags(flags);
+            self
+        }
     }
 
     /// Sets the child process's user ID. This translates to a
@@ -699,6 +754,39 @@ impl Command {
         self
     }
 
+    /// Sets the process group ID (PGID) of the child process. Equivalent to a
+    /// setpgid call in the child process, but may be more efficient.
+    ///
+    /// Process groups determine which processes receive signals.
+    ///
+    /// **Note**: This is an [unstable API][unstable] but will be stabilised once
+    /// tokio's MSRV is sufficiently new. See [the documentation on
+    /// unstable features][unstable] for details about using unstable features.
+    ///
+    /// If you want similar behaviour without using this unstable feature you can
+    /// create a [`std::process::Command`] and convert that into a
+    /// [`tokio::process::Command`] using the `From` trait.
+    ///
+    /// [unstable]: crate#unstable-features
+    /// [`tokio::process::Command`]: crate::process::Command
+    ///
+    /// ```no_run
+    /// # async fn test() { // allow using await
+    /// use tokio::process::Command;
+    ///
+    /// let output = Command::new("ls")
+    ///         .process_group(0)
+    ///         .output().await.unwrap();
+    /// # }
+    /// ```
+    #[cfg(unix)]
+    #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(all(unix, tokio_unstable))))]
+    pub fn process_group(&mut self, pgroup: i32) -> &mut Command {
+        self.std.process_group(pgroup);
+        self
+    }
+
     /// Executes the command as a child process, returning a handle to it.
     ///
     /// By default, stdin, stdout and stderr are inherited from the parent.
@@ -751,7 +839,7 @@ impl Command {
     /// from being spawned.
     ///
     /// The tokio runtime will, on a best-effort basis, attempt to reap and clean up
-    /// any process which it has spawned. No additional guarantees are made with regards
+    /// any process which it has spawned. No additional guarantees are made with regard to
     /// how quickly or how often this procedure will take place.
     ///
     /// It is recommended to avoid dropping a [`Child`] process handle before it has been
@@ -932,8 +1020,9 @@ where
     type Output = Result<T, E>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        ready!(crate::trace::trace_leaf(cx));
         // Keep track of task budget
-        let coop = ready!(crate::coop::poll_proceed(cx));
+        let coop = ready!(crate::runtime::coop::poll_proceed(cx));
 
         let ret = Pin::new(&mut self.inner).poll(cx);
 
@@ -1022,13 +1111,14 @@ impl Child {
         }
     }
 
-    /// Extracts the raw handle of the process associated with this child while
-    /// it is still running. Returns `None` if the child has exited.
-    #[cfg(windows)]
-    pub fn raw_handle(&self) -> Option<RawHandle> {
-        match &self.child {
-            FusedChild::Child(c) => Some(c.inner.as_raw_handle()),
-            FusedChild::Done(_) => None,
+    cfg_windows! {
+        /// Extracts the raw handle of the process associated with this child while
+        /// it is still running. Returns `None` if the child has exited.
+        pub fn raw_handle(&self) -> Option<RawHandle> {
+            match &self.child {
+                FusedChild::Child(c) => Some(c.inner.as_raw_handle()),
+                FusedChild::Done(_) => None,
+            }
         }
     }
 
@@ -1263,7 +1353,7 @@ impl ChildStdin {
 }
 
 impl ChildStdout {
-    /// Creates an asynchronous `ChildStderr` from a synchronous one.
+    /// Creates an asynchronous `ChildStdout` from a synchronous one.
     ///
     /// # Errors
     ///
@@ -1307,6 +1397,18 @@ impl AsyncWrite for ChildStdin {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
     }
 }
 
@@ -1356,6 +1458,8 @@ impl TryInto<Stdio> for ChildStderr {
 
 #[cfg(unix)]
 mod sys {
+    #[cfg(not(tokio_no_as_fd))]
+    use std::os::unix::io::{AsFd, BorrowedFd};
     use std::os::unix::io::{AsRawFd, RawFd};
 
     use super::{ChildStderr, ChildStdin, ChildStdout};
@@ -1366,9 +1470,23 @@ mod sys {
         }
     }
 
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsFd for ChildStdin {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
+        }
+    }
+
     impl AsRawFd for ChildStdout {
         fn as_raw_fd(&self) -> RawFd {
             self.inner.as_raw_fd()
+        }
+    }
+
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsFd for ChildStdout {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
         }
     }
 
@@ -1377,17 +1495,26 @@ mod sys {
             self.inner.as_raw_fd()
         }
     }
+
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsFd for ChildStderr {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
+        }
+    }
 }
 
-#[cfg(windows)]
-mod sys {
-    use std::os::windows::io::{AsRawHandle, RawHandle};
-
-    use super::{ChildStderr, ChildStdin, ChildStdout};
-
+cfg_windows! {
     impl AsRawHandle for ChildStdin {
         fn as_raw_handle(&self) -> RawHandle {
             self.inner.as_raw_handle()
+        }
+    }
+
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsHandle for ChildStdin {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            unsafe { BorrowedHandle::borrow_raw(self.as_raw_handle()) }
         }
     }
 
@@ -1397,9 +1524,23 @@ mod sys {
         }
     }
 
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsHandle for ChildStdout {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            unsafe { BorrowedHandle::borrow_raw(self.as_raw_handle()) }
+        }
+    }
+
     impl AsRawHandle for ChildStderr {
         fn as_raw_handle(&self) -> RawHandle {
             self.inner.as_raw_handle()
+        }
+    }
+
+    #[cfg(not(tokio_no_as_fd))]
+    impl AsHandle for ChildStderr {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            unsafe { BorrowedHandle::borrow_raw(self.as_raw_handle()) }
         }
     }
 }
