@@ -16,7 +16,5 @@ members = [
 ]
 
 [patch.crates-io]
-libc = { git = "https://github.com/wasix-org/libc.git" }
-# ring = { git = "https://github.com/wasix-org/ring.git", branch = "v0.16.20" }
-mio = { git = "https://github.com/wasix-org/mio.git", branch = "epoll" }
-#mio = { path = "../../mio" }
+libc = { git = "https://github.com/wasix-org/libc.git", branch = "main" }
+mio = { git = "https://github.com/wasix-org/mio.git", branch = "v0.8.6" }
