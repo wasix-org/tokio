@@ -1416,6 +1416,7 @@ mod sys {
         }
     }
 
+    #[cfg(not(tokio_no_as_fd))]
     impl AsFd for TcpStream {
         fn as_fd(&self) -> BorrowedFd<'_> {
             unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }

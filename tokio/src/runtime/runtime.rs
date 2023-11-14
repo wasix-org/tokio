@@ -93,7 +93,7 @@ pub(super) enum Scheduler {
     CurrentThread(CurrentThread),
 
     /// Execute tasks across multiple threads.
-    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
     MultiThread(MultiThread),
 }
 
@@ -309,7 +309,7 @@ impl Runtime {
 
         match &self.scheduler {
             Scheduler::CurrentThread(exec) => exec.block_on(&self.handle.inner, future),
-            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
             Scheduler::MultiThread(exec) => exec.block_on(&self.handle.inner, future),
         }
     }
@@ -425,7 +425,7 @@ impl Drop for Runtime {
                 let _guard = context::try_set_current(&self.handle.inner);
                 current_thread.shutdown(&self.handle.inner);
             }
-            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+            #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
             Scheduler::MultiThread(multi_thread) => {
                 // The threaded scheduler drops its tasks on its worker threads, which is
                 // already in the runtime's context.

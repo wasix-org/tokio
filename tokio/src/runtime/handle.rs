@@ -493,7 +493,7 @@ cfg_taskdump! {
         pub async fn dump(&self) -> crate::runtime::Dump {
             match &self.inner {
                 scheduler::Handle::CurrentThread(handle) => handle.dump(),
-                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+                #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
                 scheduler::Handle::MultiThread(handle) => {
                     // perform the trace in a separate thread so that the
                     // trace itself does not appear in the taskdump.

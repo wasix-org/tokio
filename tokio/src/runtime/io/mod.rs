@@ -184,7 +184,7 @@ impl Driver {
         match self.poll.poll(events, max_wait) {
             Ok(_) => {}
             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-            #[cfg(tokio_wasi)]
+            #[cfg(tokio_wasi_classic)]
             Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
                 // In case of wasm32_wasi this error happens, when trying to poll without subscriptions
                 // just return from the park, as there would be nothing, which wakes us up.

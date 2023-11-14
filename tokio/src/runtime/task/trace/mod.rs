@@ -184,7 +184,7 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
             if let Some(scheduler) = scheduler {
                 match scheduler {
                     scheduler::Context::CurrentThread(s) => s.defer.defer(cx.waker()),
-                    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi)))]
+                    #[cfg(all(feature = "rt-multi-thread", not(tokio_wasi_classic)))]
                     scheduler::Context::MultiThread(s) => s.defer.defer(cx.waker()),
                 }
             }
