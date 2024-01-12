@@ -85,7 +85,7 @@ macro_rules! cfg_fs {
     ($($item:item)*) => {
         $(
             #[cfg(feature = "fs")]
-            #[cfg(not(target_os = "wasi"))]
+            #[cfg(any(not(target_os = "wasi"), target_vendor = "wasmer"))]
             #[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
             $item
         )*
@@ -372,7 +372,7 @@ macro_rules! cfg_not_rt {
 macro_rules! cfg_rt_multi_thread {
     ($($item:item)*) => {
         $(
-            #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
+            #[cfg(all(feature = "rt-multi-thread", any(not(target_os = "wasi"), target_vendor = "wasmer")))]
             #[cfg_attr(docsrs, doc(cfg(feature = "rt-multi-thread")))]
             $item
         )*

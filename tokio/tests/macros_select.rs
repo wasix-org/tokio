@@ -633,7 +633,7 @@ mod unstable {
     }
 
     #[test]
-    #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
+    #[cfg(all(feature = "rt-multi-thread", any(not(target_os = "wasi"), target_vendor = "wasmer")))]
     fn deterministic_select_multi_thread() {
         let seed = b"bytes used to generate seed";
         let rt1 = tokio::runtime::Builder::new_multi_thread()
