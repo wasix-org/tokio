@@ -458,7 +458,7 @@ compile_error! {
 
 #[cfg(all(
     not(tokio_unstable),
-    target_family = "wasm",
+    all(target_family = "wasm", not(target_vendor = "wasmer")),
     any(
         feature = "fs",
         feature = "io-std",
