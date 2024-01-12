@@ -23,7 +23,7 @@
 //! [`UnixDatagram`]: UnixDatagram
 
 mod addr;
-cfg_not_wasi! {
+cfg_not_wasi_classic! {
     #[cfg(feature = "net")]
     pub(crate) use addr::to_socket_addrs;
 }
@@ -36,7 +36,7 @@ cfg_net! {
     pub mod tcp;
     pub use tcp::listener::TcpListener;
     pub use tcp::stream::TcpStream;
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         pub use tcp::socket::TcpSocket;
 
         mod udp;

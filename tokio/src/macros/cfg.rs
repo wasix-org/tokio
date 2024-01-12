@@ -565,6 +565,15 @@ macro_rules! cfg_not_wasi {
     }
 }
 
+macro_rules! cfg_not_wasi_classic {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(all(target_os = "wasi", not(target_vendor = "wasmer"))))]
+            $item
+        )*
+    }
+}
+
 macro_rules! cfg_is_wasm_not_wasi {
     ($($item:item)*) => {
         $(

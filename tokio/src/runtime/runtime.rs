@@ -146,7 +146,7 @@ impl Runtime {
         }
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Creates a new runtime instance with default configuration values.
         ///
         /// This results in the multi threaded scheduler, I/O driver, and time driver being

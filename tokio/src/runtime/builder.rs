@@ -224,7 +224,7 @@ impl Builder {
         Builder::new(Kind::CurrentThread, EVENT_INTERVAL)
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Returns a new builder with the multi thread scheduler selected.
         ///
         /// Configuration methods can be chained on the return value.
