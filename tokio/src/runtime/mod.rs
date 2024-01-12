@@ -341,7 +341,7 @@ cfg_time! {
     pub(crate) mod time;
 }
 
-cfg_signal_internal_and_unix! {
+cfg_signal_internal_and_unix_or_wasix! {
     pub(crate) mod signal;
 }
 

@@ -118,7 +118,7 @@ impl Registration {
 
     // Uses the poll path, requiring the caller to ensure mutual exclusion for
     // correctness. Only the last task to call this function is notified.
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(any(not(target_os = "wasi"), target_vendor = "wasmer"))]
     pub(crate) fn poll_read_io<R>(
         &self,
         cx: &mut Context<'_>,

@@ -396,7 +396,7 @@ impl fmt::Debug for TcpListener {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use super::TcpListener;
     use std::os::unix::prelude::*;

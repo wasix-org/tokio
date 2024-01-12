@@ -4,7 +4,7 @@ use std::fmt;
 use std::io;
 use std::net::SocketAddr;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 use std::time::Duration;
 
@@ -625,7 +625,7 @@ impl TcpSocket {
     /// ```
     pub async fn connect(self, addr: SocketAddr) -> io::Result<TcpStream> {
         if let Err(err) = self.inner.connect(&addr.into()) {
-            #[cfg(unix)]
+            #[cfg(any(unix, target_vendor = "wasmer"))]
             if err.raw_os_error() != Some(libc::EINPROGRESS) {
                 return Err(err);
             }
@@ -634,7 +634,7 @@ impl TcpSocket {
                 return Err(err);
             }
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, target_vendor = "wasmer"))]
         let mio = {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
 
@@ -690,7 +690,7 @@ impl TcpSocket {
     /// ```
     pub fn listen(self, backlog: u32) -> io::Result<TcpListener> {
         self.inner.listen(backlog as i32)?;
-        #[cfg(unix)]
+        #[cfg(any(unix, target_vendor = "wasmer"))]
         let mio = {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
 
@@ -743,7 +743,7 @@ impl TcpSocket {
     /// }
     /// ```
     pub fn from_std_stream(std_stream: std::net::TcpStream) -> TcpSocket {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_vendor = "wasmer"))]
         {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
 
@@ -777,21 +777,21 @@ impl fmt::Debug for TcpSocket {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 impl AsRawFd for TcpSocket {
     fn as_raw_fd(&self) -> RawFd {
         self.inner.as_raw_fd()
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 impl AsFd for TcpSocket {
     fn as_fd(&self) -> BorrowedFd<'_> {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 impl FromRawFd for TcpSocket {
     /// Converts a `RawFd` to a `TcpSocket`.
     ///
@@ -805,7 +805,7 @@ impl FromRawFd for TcpSocket {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 impl IntoRawFd for TcpSocket {
     fn into_raw_fd(self) -> RawFd {
         self.inner.into_raw_fd()

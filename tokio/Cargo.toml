@@ -95,12 +95,10 @@ pin-project-lite = "0.2.11"
 
 # Everything else is optional...
 bytes = { version = "1.0.0", optional = true }
-mio = { version = "0.8.9", optional = true, default-features = false }
+mio = { git = "https://github.com/wasix-org/mio.git", branch = "v0.8.9", optional = true, default-features = false }
 num_cpus = { version = "1.8.0", optional = true }
-parking_lot = { version = "0.12.0", optional = true }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-socket2 = { version = "0.5.5", optional = true, features = [ "all" ] }
+parking_lot = { git = "https://github.com/wasix-org/parking_lot.git", features = [ "nightly" ], branch = "v0.12.1", optional = true }
+socket2 = { git = "https://github.com/wasix-org/socket2.git", branch = "v0.5.5", optional = true, features = [ "all" ] }
 
 # Currently unstable. The API exposed by these features may be broken at any time.
 # Requires `--cfg tokio_unstable` to enable.
@@ -112,12 +110,12 @@ tracing = { version = "0.1.25", default-features = false, features = ["std"], op
 [target.'cfg(tokio_taskdump)'.dependencies]
 backtrace = { version = "0.3.58" }
 
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2.149", optional = true }
-signal-hook-registry = { version = "1.1.1", optional = true }
+[target.'cfg(any(unix, target_vendor = "wasmer"))'.dependencies]
+libc = { git = "https://github.com/wasix-org/libc.git", branch = "v0.2.152", optional = true }
+signal-hook-registry = { git = "https://github.com/wasix-org/signal-hook.git", branch = "registry-v1.1.1", optional = true }
 
-[target.'cfg(unix)'.dev-dependencies]
-libc = { version = "0.2.149" }
+[target.'cfg(any(unix, target_vendor = "wasmer"))'.dev-dependencies]
+libc = { git = "https://github.com/wasix-org/libc.git", branch = "v0.2.152" }
 nix = { version = "0.27.1", default-features = false, features = ["fs", "socket"] }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
@@ -139,7 +137,7 @@ mockall = "0.11.1"
 async-stream = "0.3"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-socket2 = "0.5.5"
+socket2 = { git = "https://github.com/wasix-org/socket2.git", branch = "v0.5.5" }
 tempfile = "3.1.0"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dev-dependencies]

@@ -26,7 +26,7 @@
 //! Wait for SIGHUP on Unix
 //!
 //! ```rust,no_run
-//! # #[cfg(unix)] {
+//! # #[cfg(any(unix, target_vendor = "wasmer"))] {
 //! use tokio::signal::unix::{signal, SignalKind};
 //!
 //! #[tokio::main]
@@ -51,7 +51,7 @@ pub use ctrl_c::ctrl_c;
 pub(crate) mod registry;
 
 mod os {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     pub(crate) use super::unix::{OsExtraData, OsStorage};
 
     #[cfg(windows)]

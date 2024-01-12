@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused))]
+
 use crate::fs::{asyncify, File};
 
 use std::io;
@@ -10,8 +12,11 @@ use mock_open_options::MockOpenOptions as StdOpenOptions;
 #[cfg(not(test))]
 use std::fs::OpenOptions as StdOpenOptions;
 
-#[cfg(unix)]
+#[cfg(any(unix))]
 use std::os::unix::fs::OpenOptionsExt;
+#[allow(unused_imports)]
+#[cfg(any(target_os = "wasi"))]
+use std::os::wasi::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 

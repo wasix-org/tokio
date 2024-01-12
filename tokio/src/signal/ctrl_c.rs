@@ -1,4 +1,4 @@
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 use super::unix::{self as os_impl};
 #[cfg(windows)]
 use super::windows::{self as os_impl};

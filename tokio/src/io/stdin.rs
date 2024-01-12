@@ -48,7 +48,7 @@ cfg_io_std! {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 

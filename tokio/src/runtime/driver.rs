@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused, dead_code))]
+
 //! Abstracts out the entire chain of runtime sub-drivers into common types.
 
 // Eventually, this file will see significant refactoring / cleanup. For now, we
@@ -97,7 +99,7 @@ impl Handle {
         }
     }
 
-    cfg_signal_internal_and_unix! {
+    cfg_signal_internal_and_unix_or_wasix! {
         #[track_caller]
         pub(crate) fn signal(&self) -> &crate::runtime::signal::Handle {
             self.signal
@@ -241,7 +243,7 @@ cfg_not_io_driver! {
 
 // ===== signal driver =====
 
-cfg_signal_internal_and_unix! {
+cfg_signal_internal_and_unix_or_wasix! {
     type SignalDriver = crate::runtime::signal::Driver;
     pub(crate) type SignalHandle = Option<crate::runtime::signal::Handle>;
 
@@ -252,7 +254,7 @@ cfg_signal_internal_and_unix! {
     }
 }
 
-cfg_not_signal_internal! {
+cfg_not_signal_internal_or_unix_or_wasix! {
     pub(crate) type SignalHandle = ();
 
     cfg_io_driver! {

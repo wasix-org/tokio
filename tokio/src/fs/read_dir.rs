@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused))]
+
 use crate::fs::asyncify;
 
 use std::collections::VecDeque;
@@ -351,7 +353,7 @@ impl DirEntry {
     }
 
     /// Returns a reference to the underlying `std::fs::DirEntry`.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     pub(super) fn as_inner(&self) -> &std::fs::DirEntry {
         &self.std
     }

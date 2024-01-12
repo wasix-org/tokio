@@ -42,12 +42,12 @@ mock! {
     impl std::os::windows::io::FromRawHandle for File {
         unsafe fn from_raw_handle(h: std::os::windows::io::RawHandle) -> Self;
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     impl std::os::unix::io::AsRawFd for File {
         fn as_raw_fd(&self) -> std::os::unix::io::RawFd;
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     impl std::os::unix::io::FromRawFd for File {
         unsafe fn from_raw_fd(h: std::os::unix::io::RawFd) -> Self;
     }

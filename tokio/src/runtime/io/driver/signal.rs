@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused_imports))]
+
 use super::{Driver, Handle, TOKEN_SIGNAL};
 
 use std::io;
@@ -5,8 +7,10 @@ use std::io;
 impl Handle {
     pub(crate) fn register_signal_receiver(
         &self,
+        #[cfg(not(target_os = "wasi"))]
         receiver: &mut mio::net::UnixStream,
     ) -> io::Result<()> {
+        #[cfg(not(target_os = "wasi"))]
         self.registry
             .register(receiver, TOKEN_SIGNAL, mio::Interest::READABLE)?;
         Ok(())

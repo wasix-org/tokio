@@ -3,8 +3,9 @@
 //! This module is only defined on Unix platforms and contains the primary
 //! `Signal` type for receiving notifications of signals.
 
-#![cfg(unix)]
+#![cfg(any(unix, target_vendor = "wasmer"))]
 #![cfg_attr(docsrs, doc(cfg(all(unix, feature = "signal"))))]
+#![cfg_attr(target_os = "wasi", allow(unused))]
 
 use crate::runtime::scheduler;
 use crate::runtime::signal::Handle;
@@ -12,6 +13,7 @@ use crate::signal::registry::{globals, EventId, EventInfo, Globals, Init, Storag
 use crate::signal::RxFuture;
 use crate::sync::watch;
 
+#[cfg(not(target_os = "wasi"))]
 use mio::net::UnixStream;
 use std::io::{self, Error, ErrorKind, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,15 +51,23 @@ impl Storage for OsStorage {
 
 #[derive(Debug)]
 pub(crate) struct OsExtraData {
+    #[cfg(not(target_os = "wasi"))]
     sender: UnixStream,
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) receiver: UnixStream,
 }
 
 impl Init for OsExtraData {
+    #[cfg(not(target_os = "wasi"))]
     fn init() -> Self {
         let (receiver, sender) = UnixStream::pair().expect("failed to create UnixStream");
 
         Self { sender, receiver }
+    }
+
+    #[cfg(target_os = "wasi")]
+    fn init() -> Self {
+        Self { }
     }
 }
 
@@ -244,8 +254,11 @@ fn action(globals: &'static Globals, signal: libc::c_int) {
 
     // Send a wakeup, ignore any errors (anything reasonably possible is
     // full pipe and then it will wake up anyway).
-    let mut sender = &globals.sender;
-    drop(sender.write(&[1]));
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let mut sender = &globals.sender;
+        drop(sender.write(&[1]));
+    }
 }
 
 /// Enables this module to receive signal notifications for the `signal`

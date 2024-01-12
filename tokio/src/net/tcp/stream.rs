@@ -1371,7 +1371,7 @@ impl fmt::Debug for TcpStream {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use super::TcpStream;
     use std::os::unix::prelude::*;

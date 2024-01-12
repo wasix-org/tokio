@@ -40,7 +40,7 @@ impl<T: 'static> Shared<T> {
     // Kind of annoying to have to include the cfg here
     #[cfg(any(
         tokio_taskdump,
-        all(feature = "rt-multi-thread", not(target_os = "wasi"))
+        all(feature = "rt-multi-thread", not(all(target_os = "wasi", target_vendor = "unknown")))
     ))]
     pub(crate) fn is_closed(&self, synced: &Synced) -> bool {
         synced.is_closed

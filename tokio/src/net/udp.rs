@@ -246,7 +246,7 @@ impl UdpSocket {
     /// [`std::net::UdpSocket`]: std::net::UdpSocket
     /// [`set_nonblocking`]: fn@std::net::UdpSocket::set_nonblocking
     pub fn into_std(self) -> io::Result<std::net::UdpSocket> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_vendor = "wasmer"))]
         {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
             self.io
@@ -2010,7 +2010,7 @@ impl fmt::Debug for UdpSocket {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use super::UdpSocket;
     use std::os::unix::prelude::*;

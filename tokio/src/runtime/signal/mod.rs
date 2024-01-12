@@ -1,10 +1,12 @@
 #![cfg_attr(not(feature = "rt"), allow(dead_code))]
+#![cfg_attr(target_os = "wasi", allow(unused, dead_code))]
 
 //! Signal driver
 
 use crate::runtime::{driver, io};
 use crate::signal::registry::globals;
 
+#[cfg(not(target_os = "wasi"))]
 use mio::net::UnixStream;
 use std::io::{self as std_io, Read};
 use std::sync::{Arc, Weak};
@@ -21,6 +23,7 @@ pub(crate) struct Driver {
     io: io::Driver,
 
     /// A pipe for receiving wake events from the signal handler
+    #[cfg(not(target_os = "wasi"))]
     receiver: UnixStream,
 
     /// Shared state. The driver keeps a strong ref and the handle keeps a weak
@@ -62,19 +65,23 @@ impl Driver {
         // with registering dups with the same reactor. In this case, duping is
         // safe as each dup is registered with separate reactors **and** we
         // only expect at least one dup to receive the notification.
+        #[cfg(not(target_os = "wasi"))]
+        let receiver = {
+            // Manually drop as we don't actually own this instance of UnixStream.
+            let receiver_fd = globals().receiver.as_raw_fd();
 
-        // Manually drop as we don't actually own this instance of UnixStream.
-        let receiver_fd = globals().receiver.as_raw_fd();
+            // safety: there is nothing unsafe about this, but the `from_raw_fd` fn is marked as unsafe.
+            let original =
+                ManuallyDrop::new(unsafe { std::os::unix::net::UnixStream::from_raw_fd(receiver_fd) });
+            let mut receiver = UnixStream::from_std(original.try_clone()?);
 
-        // safety: there is nothing unsafe about this, but the `from_raw_fd` fn is marked as unsafe.
-        let original =
-            ManuallyDrop::new(unsafe { std::os::unix::net::UnixStream::from_raw_fd(receiver_fd) });
-        let mut receiver = UnixStream::from_std(original.try_clone()?);
-
-        io_handle.register_signal_receiver(&mut receiver)?;
+            io_handle.register_signal_receiver(&mut receiver)?;
+            receiver
+        };
 
         Ok(Self {
             io,
+            #[cfg(not(target_os = "wasi"))]
             receiver,
             inner: Arc::new(()),
         })
@@ -111,13 +118,16 @@ impl Driver {
 
         // Drain the pipe completely so we can receive a new readiness event
         // if another signal has come in.
-        let mut buf = [0; 128];
-        loop {
-            match self.receiver.read(&mut buf) {
-                Ok(0) => panic!("EOF on self-pipe"),
-                Ok(_) => continue, // Keep reading
-                Err(e) if e.kind() == std_io::ErrorKind::WouldBlock => break,
-                Err(e) => panic!("Bad read on self-pipe: {}", e),
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let mut buf = [0; 128];
+            loop {
+                match self.receiver.read(&mut buf) {
+                    Ok(0) => panic!("EOF on self-pipe"),
+                    Ok(_) => continue, // Keep reading
+                    Err(e) if e.kind() == std_io::ErrorKind::WouldBlock => break,
+                    Err(e) => panic!("Bad read on self-pipe: {}", e),
+                }
             }
         }
 

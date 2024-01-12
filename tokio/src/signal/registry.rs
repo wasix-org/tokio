@@ -144,7 +144,7 @@ impl Globals {
         self.registry.broadcast()
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     pub(crate) fn storage(&self) -> &OsStorage {
         &self.registry.storage
     }

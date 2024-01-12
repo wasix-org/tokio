@@ -276,7 +276,7 @@ macro_rules! cfg_process {
             #[cfg(feature = "process")]
             #[cfg_attr(docsrs, doc(cfg(feature = "process")))]
             #[cfg(not(loom))]
-            #[cfg(not(target_os = "wasi"))]
+            #[cfg(any(not(target_os = "wasi"), target_vendor = "wasmer"))]
             $item
         )*
     }
@@ -284,7 +284,7 @@ macro_rules! cfg_process {
 
 macro_rules! cfg_process_driver {
     ($($item:item)*) => {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_vendor = "wasmer"))]
         #[cfg(not(loom))]
         cfg_process! { $($item)* }
     }
@@ -293,7 +293,7 @@ macro_rules! cfg_process_driver {
 macro_rules! cfg_not_process_driver {
     ($($item:item)*) => {
         $(
-            #[cfg(not(all(unix, not(loom), feature = "process")))]
+            #[cfg(not(all(any(unix, target_vendor = "wasmer"), not(loom), feature = "process")))]
             $item
         )*
     }
@@ -305,7 +305,7 @@ macro_rules! cfg_signal {
             #[cfg(feature = "signal")]
             #[cfg_attr(docsrs, doc(cfg(feature = "signal")))]
             #[cfg(not(loom))]
-            #[cfg(not(target_os = "wasi"))]
+            #[cfg(any(not(target_os = "wasi"), target_vendor = "wasmer"))]
             $item
         )*
     }
@@ -328,10 +328,26 @@ macro_rules! cfg_signal_internal_and_unix {
     }
 }
 
+macro_rules! cfg_signal_internal_and_unix_or_wasix {
+    ($($item:item)*) => {
+        #[cfg(any(unix, target_vendor = "wasmer"))]
+        cfg_signal_internal! { $($item)* }
+    }
+}
+
 macro_rules! cfg_not_signal_internal {
     ($($item:item)*) => {
         $(
             #[cfg(any(loom, not(unix), not(any(feature = "signal", all(unix, feature = "process")))))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_signal_internal_or_unix_or_wasix {
+    ($($item:item)*) => {
+        $(
+            #[cfg(any(loom, not(any(unix, target_vendor = "wasmer")), not(any(feature = "signal", all(unix, feature = "process")))))]
             $item
         )*
     }
