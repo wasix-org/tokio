@@ -12,10 +12,10 @@ use mock_open_options::MockOpenOptions as StdOpenOptions;
 #[cfg(not(test))]
 use std::fs::OpenOptions as StdOpenOptions;
 
-#[cfg(any(unix))]
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[allow(unused_imports)]
-#[cfg(any(target_os = "wasi"))]
+#[cfg(target_os = "wasi")]
 use std::os::wasi::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;

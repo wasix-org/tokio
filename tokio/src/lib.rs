@@ -19,6 +19,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![cfg_attr(loom, allow(dead_code, unreachable_pub))]
+#![cfg_attr(
+    all(feature = "fs", target_os = "wasi", target_vendor = "wasmer"),
+    feature(wasi_ext)
+)]
 
 //! A runtime for writing reliable network applications without compromising speed.
 //!
