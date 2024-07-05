@@ -255,8 +255,6 @@ use std::task::Poll;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-#[cfg(all(target_os = "wasi", target_vendor = "wasmer"))]
-use std::os::unix::process::CommandExt;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -671,7 +669,7 @@ impl Command {
     /// Sets the child process's user ID. This translates to a
     /// `setuid` call in the child process. Failure in the `setuid`
     /// call will cause the spawn to fail.
-    #[cfg(any(unix, target_vendor = "wasmer"))]
+    #[cfg(any(unix))]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn uid(&mut self, id: u32) -> &mut Command {
         self.std.uid(id);
@@ -680,7 +678,7 @@ impl Command {
 
     /// Similar to `uid` but sets the group ID of the child process. This has
     /// the same semantics as the `uid` field.
-    #[cfg(any(unix, target_vendor = "wasmer"))]
+    #[cfg(any(unix))]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn gid(&mut self, id: u32) -> &mut Command {
         self.std.gid(id);
@@ -691,7 +689,7 @@ impl Command {
     ///
     /// Set the first process argument, `argv[0]`, to something other than the
     /// default executable path.
-    #[cfg(any(unix, target_vendor = "wasmer"))]
+    #[cfg(any(unix))]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn arg0<S>(&mut self, arg: S) -> &mut Command
     where
@@ -730,7 +728,7 @@ impl Command {
     /// When this closure is run, aspects such as the stdio file descriptors and
     /// working directory have successfully been changed, so output to these
     /// locations may not appear where intended.
-    #[cfg(any(unix, target_vendor = "wasmer"))]
+    #[cfg(any(unix))]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Command
     where
