@@ -111,11 +111,11 @@ tracing = { version = "0.1.25", default-features = false, features = ["std"], op
 backtrace = { version = "0.3.58" }
 
 [target.'cfg(any(unix, target_vendor = "wasmer"))'.dependencies]
-libc = { git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.155", optional = true }
+libc = { git = "https://github.com/wasix-org/libc.git", branch = "v0.2.152", optional = true }
 signal-hook-registry = { git = "https://github.com/wasix-org/signal-hook.git", branch = "registry-v1.1.1", optional = true }
 
 [target.'cfg(any(unix, target_vendor = "wasmer"))'.dev-dependencies]
-libc = { git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.155" }
+libc = { git = "https://github.com/wasix-org/libc.git", branch = "v0.2.152" }
 nix = { version = "0.27.1", default-features = false, features = ["fs", "socket"] }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
