@@ -95,7 +95,7 @@ bytes = { version = "1.0.0", optional = true }
 mio = { git = "https://github.com/wasix-org/mio.git", branch = "v0.8.9", optional = true, default-features = false }
 num_cpus = { version = "1.8.0", optional = true }
 parking_lot = { git = "https://github.com/mvniekerk/parking_lot.git", features = [ "nightly" ], branch = "master", optional = true }
-socket2 = { git = "https://github.com/wasix-org/socket2.git", branch = "v0.5.5", optional = true, features = [ "all" ] }
+socket2 = { git = "https://github.com/mvniekerk/socket2.git", branch = "v0.5.5", optional = true, features = [ "all" ] }
 
 # Currently unstable. The API exposed by these features may be broken at any time.
 # Requires `--cfg tokio_unstable` to enable.
@@ -134,7 +134,7 @@ mockall = "0.11.1"
 async-stream = "0.3"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-socket2 = { git = "https://github.com/wasix-org/socket2.git", branch = "v0.5.5" }
+socket2 = { git = "https://github.com/mvniekerk/socket2.git", branch = "v0.5.5" }
 tempfile = "3.1.0"
 proptest = "1"
 
