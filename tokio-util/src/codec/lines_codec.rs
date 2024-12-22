@@ -2,9 +2,11 @@ use crate::codec::decoder::Decoder;
 use crate::codec::encoder::Encoder;
 
 use bytes::{Buf, BufMut, BytesMut};
-use std::{cmp, fmt, io, str, usize};
+use std::{cmp, fmt, io, str};
 
 /// A simple [`Decoder`] and [`Encoder`] implementation that splits up data into lines.
+///
+/// This uses the `\n` character as the line ending on all platforms.
 ///
 /// [`Decoder`]: crate::codec::Decoder
 /// [`Encoder`]: crate::codec::Encoder
@@ -216,7 +218,7 @@ impl fmt::Display for LinesCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LinesCodecError::MaxLineLengthExceeded => write!(f, "max line length exceeded"),
-            LinesCodecError::Io(e) => write!(f, "{}", e),
+            LinesCodecError::Io(e) => write!(f, "{e}"),
         }
     }
 }

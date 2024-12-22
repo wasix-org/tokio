@@ -1,9 +1,9 @@
 #![allow(unreachable_pub)]
-//! Mock version of std::fs::OpenOptions;
+//! Mock version of `std::fs::OpenOptions`;
 use mockall::mock;
 
 use crate::fs::mocks::MockFile;
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
@@ -23,7 +23,7 @@ mock! {
     impl Clone for OpenOptions {
         fn clone(&self) -> Self;
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     impl OpenOptionsExt for OpenOptions {
         fn custom_flags(&mut self, flags: i32) -> &mut Self;
         fn mode(&mut self, mode: u32) -> &mut Self;

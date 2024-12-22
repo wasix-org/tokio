@@ -1,13 +1,13 @@
 //! In-process memory IO types.
 
-use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
+use crate::io::{split, AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 use crate::loom::sync::Mutex;
 
 use bytes::{Buf, BytesMut};
 use std::{
     pin::Pin,
     sync::Arc,
-    task::{self, Poll, Waker},
+    task::{self, ready, Poll, Waker},
 };
 
 /// A bidirectional pipe to read and write bytes in memory.
@@ -47,15 +47,34 @@ use std::{
 #[derive(Debug)]
 #[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
 pub struct DuplexStream {
-    read: Arc<Mutex<Pipe>>,
-    write: Arc<Mutex<Pipe>>,
+    read: Arc<Mutex<SimplexStream>>,
+    write: Arc<Mutex<SimplexStream>>,
 }
 
-/// A unidirectional IO over a piece of memory.
+/// A unidirectional pipe to read and write bytes in memory.
 ///
-/// Data can be written to the pipe, and reading will return that data.
+/// It can be constructed by [`simplex`] function which will create a pair of
+/// reader and writer or by calling [`SimplexStream::new_unsplit`] that will
+/// create a handle for both reading and writing.
+///
+/// # Example
+///
+/// ```
+/// # async fn ex() -> std::io::Result<()> {
+/// # use tokio::io::{AsyncReadExt, AsyncWriteExt};
+/// let (mut receiver, mut sender) = tokio::io::simplex(64);
+///
+/// sender.write_all(b"ping").await?;
+///
+/// let mut buf = [0u8; 4];
+/// receiver.read_exact(&mut buf).await?;
+/// assert_eq!(&buf, b"ping");
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
-struct Pipe {
+#[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
+pub struct SimplexStream {
     /// The buffer storing the bytes written, also read from.
     ///
     /// Using a `BytesMut` because it has efficient `Buf` and `BufMut`
@@ -83,8 +102,8 @@ struct Pipe {
 /// written to a side before the write returns `Poll::Pending`.
 #[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
 pub fn duplex(max_buf_size: usize) -> (DuplexStream, DuplexStream) {
-    let one = Arc::new(Mutex::new(Pipe::new(max_buf_size)));
-    let two = Arc::new(Mutex::new(Pipe::new(max_buf_size)));
+    let one = Arc::new(Mutex::new(SimplexStream::new_unsplit(max_buf_size)));
+    let two = Arc::new(Mutex::new(SimplexStream::new_unsplit(max_buf_size)));
 
     (
         DuplexStream {
@@ -124,6 +143,18 @@ impl AsyncWrite for DuplexStream {
         Pin::new(&mut *self.write.lock()).poll_write(cx, buf)
     }
 
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut *self.write.lock()).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
     #[allow(unused_mut)]
     fn poll_flush(
         mut self: Pin<&mut Self>,
@@ -149,11 +180,47 @@ impl Drop for DuplexStream {
     }
 }
 
-// ===== impl Pipe =====
+// ===== impl SimplexStream =====
 
-impl Pipe {
-    fn new(max_buf_size: usize) -> Self {
-        Pipe {
+/// Creates unidirectional buffer that acts like in memory pipe.
+///
+/// The `max_buf_size` argument is the maximum amount of bytes that can be
+/// written to a buffer before the it returns `Poll::Pending`.
+///
+/// # Unify reader and writer
+///
+/// The reader and writer half can be unified into a single structure
+/// of `SimplexStream` that supports both reading and writing or
+/// the `SimplexStream` can be already created as unified structure
+/// using [`SimplexStream::new_unsplit()`].
+///
+/// ```
+/// # async fn ex() -> std::io::Result<()> {
+/// # use tokio::io::{AsyncReadExt, AsyncWriteExt};
+/// let (writer, reader) = tokio::io::simplex(64);
+/// let mut simplex_stream = writer.unsplit(reader);
+/// simplex_stream.write_all(b"hello").await?;
+///
+/// let mut buf = [0u8; 5];
+/// simplex_stream.read_exact(&mut buf).await?;
+/// assert_eq!(&buf, b"hello");
+/// # Ok(())
+/// # }
+/// ```
+#[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
+pub fn simplex(max_buf_size: usize) -> (ReadHalf<SimplexStream>, WriteHalf<SimplexStream>) {
+    split(SimplexStream::new_unsplit(max_buf_size))
+}
+
+impl SimplexStream {
+    /// Creates unidirectional buffer that acts like in memory pipe. To create split
+    /// version with separate reader and writer you can use [`simplex`] function.
+    ///
+    /// The `max_buf_size` argument is the maximum amount of bytes that can be
+    /// written to a buffer before the it returns `Poll::Pending`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
+    pub fn new_unsplit(max_buf_size: usize) -> SimplexStream {
+        SimplexStream {
             buffer: BytesMut::new(),
             is_closed: false,
             max_buf_size,
@@ -224,15 +291,47 @@ impl Pipe {
         }
         Poll::Ready(Ok(len))
     }
+
+    fn poll_write_vectored_internal(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        if self.is_closed {
+            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+        }
+        let avail = self.max_buf_size - self.buffer.len();
+        if avail == 0 {
+            self.write_waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
+
+        let mut rem = avail;
+        for buf in bufs {
+            if rem == 0 {
+                break;
+            }
+
+            let len = buf.len().min(rem);
+            self.buffer.extend_from_slice(&buf[..len]);
+            rem -= len;
+        }
+
+        if let Some(waker) = self.read_waker.take() {
+            waker.wake();
+        }
+        Poll::Ready(Ok(avail - rem))
+    }
 }
 
-impl AsyncRead for Pipe {
+impl AsyncRead for SimplexStream {
     cfg_coop! {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut task::Context<'_>,
             buf: &mut ReadBuf<'_>,
         ) -> Poll<std::io::Result<()>> {
+            ready!(crate::trace::trace_leaf(cx));
             let coop = ready!(crate::runtime::coop::poll_proceed(cx));
 
             let ret = self.poll_read_internal(cx, buf);
@@ -249,18 +348,20 @@ impl AsyncRead for Pipe {
             cx: &mut task::Context<'_>,
             buf: &mut ReadBuf<'_>,
         ) -> Poll<std::io::Result<()>> {
+            ready!(crate::trace::trace_leaf(cx));
             self.poll_read_internal(cx, buf)
         }
     }
 }
 
-impl AsyncWrite for Pipe {
+impl AsyncWrite for SimplexStream {
     cfg_coop! {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut task::Context<'_>,
             buf: &[u8],
         ) -> Poll<std::io::Result<usize>> {
+            ready!(crate::trace::trace_leaf(cx));
             let coop = ready!(crate::runtime::coop::poll_proceed(cx));
 
             let ret = self.poll_write_internal(cx, buf);
@@ -277,8 +378,41 @@ impl AsyncWrite for Pipe {
             cx: &mut task::Context<'_>,
             buf: &[u8],
         ) -> Poll<std::io::Result<usize>> {
+            ready!(crate::trace::trace_leaf(cx));
             self.poll_write_internal(cx, buf)
         }
+    }
+
+    cfg_coop! {
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            bufs: &[std::io::IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            ready!(crate::trace::trace_leaf(cx));
+            let coop = ready!(crate::runtime::coop::poll_proceed(cx));
+
+            let ret = self.poll_write_vectored_internal(cx, bufs);
+            if ret.is_ready() {
+                coop.made_progress();
+            }
+            ret
+        }
+    }
+
+    cfg_not_coop! {
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            bufs: &[std::io::IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            ready!(crate::trace::trace_leaf(cx));
+            self.poll_write_vectored_internal(cx, bufs)
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
     }
 
     fn poll_flush(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<std::io::Result<()>> {

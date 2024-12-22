@@ -1,12 +1,12 @@
 #![warn(rust_2018_idioms)]
 #![cfg(feature = "sync")]
 
-#[cfg(tokio_wasm_not_wasi)]
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-#[cfg(tokio_wasm_not_wasi)]
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
 use wasm_bindgen_test::wasm_bindgen_test as maybe_tokio_test;
 
-#[cfg(not(tokio_wasm_not_wasi))]
+#[cfg(not(all(target_family = "wasm", not(target_os = "wasi"))))]
 use tokio::test as maybe_tokio_test;
 
 use tokio::sync::Mutex;
@@ -59,6 +59,7 @@ fn readiness() {
 /// is aborted prematurely.
 #[tokio::test]
 #[cfg(feature = "full")]
+#[cfg_attr(miri, ignore)]
 async fn aborted_future_1() {
     use std::time::Duration;
     use tokio::time::{interval, timeout};
@@ -132,5 +133,5 @@ fn try_lock_owned() {
 async fn debug_format() {
     let s = "debug";
     let m = Arc::new(Mutex::new(s.to_string()));
-    assert_eq!(format!("{:?}", s), format!("{:?}", m.lock_owned().await));
+    assert_eq!(format!("{s:?}"), format!("{:?}", m.lock_owned().await));
 }

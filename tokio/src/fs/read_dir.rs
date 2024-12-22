@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused))]
+
 use crate::fs::asyncify;
 
 use std::collections::VecDeque;
@@ -8,8 +10,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Context;
-use std::task::Poll;
+use std::task::{ready, Context, Poll};
 
 #[cfg(test)]
 use super::mocks::spawn_blocking;
@@ -24,7 +25,7 @@ const CHUNK_SIZE: usize = 32;
 
 /// Returns a stream over the entries within a directory.
 ///
-/// This is an async version of [`std::fs::read_dir`](std::fs::read_dir)
+/// This is an async version of [`std::fs::read_dir`].
 ///
 /// This operation is implemented by running the equivalent blocking
 /// operation on a separate thread pool using [`spawn_blocking`].
@@ -77,7 +78,7 @@ impl ReadDir {
     ///
     /// This method is cancellation safe.
     pub async fn next_entry(&mut self) -> io::Result<Option<DirEntry>> {
-        use crate::future::poll_fn;
+        use std::future::poll_fn;
         poll_fn(|cx| self.poll_next_entry(cx)).await
     }
 
@@ -139,7 +140,10 @@ impl ReadDir {
                     target_os = "solaris",
                     target_os = "illumos",
                     target_os = "haiku",
-                    target_os = "vxworks"
+                    target_os = "vxworks",
+                    target_os = "aix",
+                    target_os = "nto",
+                    target_os = "vita",
                 )))]
                 file_type: std.file_type().ok(),
                 std: Arc::new(std),
@@ -200,7 +204,10 @@ pub struct DirEntry {
         target_os = "solaris",
         target_os = "illumos",
         target_os = "haiku",
-        target_os = "vxworks"
+        target_os = "vxworks",
+        target_os = "aix",
+        target_os = "nto",
+        target_os = "vita",
     )))]
     file_type: Option<FileType>,
     std: Arc<std::fs::DirEntry>,
@@ -331,7 +338,10 @@ impl DirEntry {
             target_os = "solaris",
             target_os = "illumos",
             target_os = "haiku",
-            target_os = "vxworks"
+            target_os = "vxworks",
+            target_os = "aix",
+            target_os = "nto",
+            target_os = "vita",
         )))]
         if let Some(file_type) = self.file_type {
             return Ok(file_type);
@@ -342,7 +352,7 @@ impl DirEntry {
     }
 
     /// Returns a reference to the underlying `std::fs::DirEntry`.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_vendor = "wasmer"))]
     pub(super) fn as_inner(&self) -> &std::fs::DirEntry {
         &self.std
     }

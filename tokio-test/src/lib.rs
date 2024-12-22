@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -12,6 +13,7 @@
 //! Tokio and Futures based testing utilities
 
 pub mod io;
+pub mod stream_mock;
 
 mod macros;
 pub mod task;

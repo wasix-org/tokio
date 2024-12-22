@@ -2,7 +2,7 @@ use crate::runtime::context;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 /// Yields execution back to the Tokio runtime.
 ///
@@ -54,19 +54,11 @@ pub async fn yield_now() {
 
             self.yielded = true;
 
-            let defer = context::with_defer(|rt| {
-                rt.defer(cx.waker());
-            });
-
-            if defer.is_none() {
-                //  Not currently in a runtime, just notify ourselves
-                //  immediately.
-                cx.waker().wake_by_ref();
-            }
+            context::defer(cx.waker());
 
             Poll::Pending
         }
     }
 
-    YieldNow { yielded: false }.await
+    YieldNow { yielded: false }.await;
 }

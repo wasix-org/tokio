@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", not(tokio_wasi)))] // Wasi does not support bind()
+#![cfg(all(feature = "full", not(target_os = "wasi")))] // Wasi does not support bind()
 
 use tokio::net::TcpListener;
 use tokio_test::assert_ok;
@@ -9,6 +9,7 @@ use std::net::TcpStream;
 use std::thread;
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)] // No `socket` on miri.
 async fn echo_server() {
     const N: usize = 1024;
 

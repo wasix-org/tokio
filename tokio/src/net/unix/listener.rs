@@ -3,12 +3,16 @@ use crate::net::unix::{SocketAddr, UnixStream};
 
 use std::fmt;
 use std::io;
-#[cfg(not(tokio_no_as_fd))]
-use std::os::unix::io::{AsFd, BorrowedFd};
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
-use std::os::unix::net;
+#[cfg(target_os = "android")]
+use std::os::android::net::SocketAddrExt;
+#[cfg(target_os = "linux")]
+use std::os::linux::net::SocketAddrExt;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::net::{self, SocketAddr as StdSocketAddr};
 use std::path::Path;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_net_unix! {
     /// A Unix socket which can accept connections from other Unix sockets.
@@ -52,6 +56,11 @@ cfg_net_unix! {
 }
 
 impl UnixListener {
+    pub(crate) fn new(listener: mio::net::UnixListener) -> io::Result<UnixListener> {
+        let io = PollEvented::new(listener)?;
+        Ok(UnixListener { io })
+    }
+
     /// Creates a new `UnixListener` bound to the specified path.
     ///
     /// # Panics
@@ -67,14 +76,27 @@ impl UnixListener {
     where
         P: AsRef<Path>,
     {
-        let listener = mio::net::UnixListener::bind(path)?;
+        // For now, we handle abstract socket paths on linux here.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        let addr = {
+            let os_str_bytes = path.as_ref().as_os_str().as_bytes();
+            if os_str_bytes.starts_with(b"\0") {
+                StdSocketAddr::from_abstract_name(&os_str_bytes[1..])?
+            } else {
+                StdSocketAddr::from_pathname(path)?
+            }
+        };
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let addr = StdSocketAddr::from_pathname(path)?;
+
+        let listener = mio::net::UnixListener::bind_addr(&addr)?;
         let io = PollEvented::new(listener)?;
         Ok(UnixListener { io })
     }
 
-    /// Creates new `UnixListener` from a `std::os::unix::net::UnixListener `.
+    /// Creates new [`UnixListener`] from a [`std::os::unix::net::UnixListener`].
     ///
-    /// This function is intended to be used to wrap a UnixListener from the
+    /// This function is intended to be used to wrap a `UnixListener` from the
     /// standard library in the Tokio equivalent.
     ///
     /// # Notes
@@ -139,7 +161,7 @@ impl UnixListener {
     pub fn into_std(self) -> io::Result<std::os::unix::net::UnixListener> {
         self.io
             .into_inner()
-            .map(|io| io.into_raw_fd())
+            .map(IntoRawFd::into_raw_fd)
             .map(|raw_fd| unsafe { net::UnixListener::from_raw_fd(raw_fd) })
     }
 
@@ -211,7 +233,6 @@ impl AsRawFd for UnixListener {
     }
 }
 
-#[cfg(not(tokio_no_as_fd))]
 impl AsFd for UnixListener {
     fn as_fd(&self) -> BorrowedFd<'_> {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }

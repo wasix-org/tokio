@@ -6,7 +6,7 @@ use self::noop_scheduler::NoopSchedule;
 use self::unowned_wrapper::unowned;
 
 mod noop_scheduler {
-    use crate::runtime::task::{self, Task};
+    use crate::runtime::task::{self, Task, TaskHarnessScheduleHooks};
 
     /// `task::Schedule` implementation that does nothing, for testing.
     pub(crate) struct NoopSchedule;
@@ -18,6 +18,12 @@ mod noop_scheduler {
 
         fn schedule(&self, _task: task::Notified<Self>) {
             unreachable!();
+        }
+
+        fn hooks(&self) -> TaskHarnessScheduleHooks {
+            TaskHarnessScheduleHooks {
+                task_terminate_callback: None,
+            }
         }
     }
 }
@@ -52,17 +58,20 @@ mod unowned_wrapper {
 
 cfg_loom! {
     mod loom_blocking;
-    mod loom_current_thread_scheduler;
-    mod loom_local;
-    mod loom_oneshot;
-    mod loom_pool;
-    mod loom_queue;
-    mod loom_shutdown_join;
+    mod loom_current_thread;
     mod loom_join_set;
-    mod loom_yield;
+    mod loom_local;
+    mod loom_multi_thread;
+    mod loom_multi_thread_alt;
+    mod loom_oneshot;
+
+    // Make sure debug assertions are enabled
+    #[cfg(not(debug_assertions))]
+    compile_error!("these tests require debug assertions to be enabled");
 }
 
 cfg_not_loom! {
+    mod inject;
     mod queue;
 
     #[cfg(not(miri))]

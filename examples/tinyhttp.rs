@@ -18,7 +18,7 @@ use futures::SinkExt;
 use http::{header::HeaderValue, Request, Response, StatusCode};
 #[macro_use]
 extern crate serde_derive;
-use std::{convert::TryFrom, env, error::Error, fmt, io};
+use std::{env, error::Error, fmt, io};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
@@ -31,13 +31,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:8080".to_string());
     let server = TcpListener::bind(&addr).await?;
-    println!("Listening on: {}", addr);
+    println!("Listening on: {addr}");
 
     loop {
         let (stream, _) = server.accept().await?;
         tokio::spawn(async move {
             if let Err(e) = process(stream).await {
-                println!("failed to process connection; error = {}", e);
+                println!("failed to process connection; error = {e}");
             }
         });
     }
@@ -159,7 +159,7 @@ impl Decoder for Http {
             let mut parsed_headers = [httparse::EMPTY_HEADER; 16];
             let mut r = httparse::Request::new(&mut parsed_headers);
             let status = r.parse(src).map_err(|e| {
-                let msg = format!("failed to parse http request: {:?}", e);
+                let msg = format!("failed to parse http request: {e:?}");
                 io::Error::new(io::ErrorKind::Other, msg)
             })?;
 
@@ -259,11 +259,11 @@ mod date {
         unix_date: u64,
     }
 
-    thread_local!(static LAST: RefCell<LastRenderedNow> = RefCell::new(LastRenderedNow {
+    thread_local!(static LAST: RefCell<LastRenderedNow> = const { RefCell::new(LastRenderedNow {
         bytes: [0; 128],
         amt: 0,
         unix_date: 0,
-    }));
+    }) });
 
     impl fmt::Display for Now {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,10 +1,11 @@
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", not(tokio_wasi)))] // WASI does not support all fs operations
+#![cfg(all(feature = "full", not(target_os = "wasi")))] // WASI does not support all fs operations
 
 use tempfile::tempdir;
 use tokio::fs;
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)] // No `chmod` in miri.
 async fn try_exists() {
     let dir = tempdir().unwrap();
 

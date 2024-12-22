@@ -1,5 +1,5 @@
 [workspace]
-
+resolver = "2"
 members = [
   "tokio",
   "tokio-macros",
@@ -14,3 +14,10 @@ members = [
   "tests-build",
   "tests-integration",
 ]
+
+[workspace.metadata.spellcheck]
+config = "spellcheck.toml"
+
+
+[patch.crates-io]
+parking_lot = { git = "https://github.com/mvniekerk/parking_lot", branch = "master" }

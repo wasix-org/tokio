@@ -4,9 +4,9 @@ name = "tokio-stream"
 # - Remove path dependencies
 # - Update CHANGELOG.md.
 # - Create "tokio-stream-0.1.x" git tag.
-version = "0.1.14"
+version = "0.1.16"
 edition = "2021"
-rust-version = "1.56"
+rust-version = "1.70"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 repository = "https://github.com/tokio-rs/tokio"
@@ -37,7 +37,7 @@ signal = ["tokio/signal"]
 
 [dependencies]
 futures-core = { version = "0.3.0" }
-pin-project-lite = "0.2.0"
+pin-project-lite = "0.2.11"
 tokio = { version = "1.15.0", path = "../tokio", features = ["sync"] }
 tokio-util = { version = "0.7.0", path = "../tokio-util", optional = true }
 
@@ -45,7 +45,7 @@ tokio-util = { version = "0.7.0", path = "../tokio-util", optional = true }
 tokio = { version = "1.2.0", path = "../tokio", features = ["full", "test-util"] }
 async-stream = "0.3"
 parking_lot = "0.12.0"
-tokio-test = { path = "../tokio-test" }
+tokio-test = { version = "0.4", path = "../tokio-test" }
 futures = { version = "0.3", default-features = false }
 
 [package.metadata.docs.rs]

@@ -1,5 +1,7 @@
 #![warn(rust_2018_idioms)]
 #![cfg(not(target_os = "wasi"))] // Wasi doesn't support threads
+// Blocked on https://github.com/rust-lang/miri/issues/3911
+#![cfg(not(miri))]
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -31,7 +33,7 @@ fn can_drop_future_and_still_get_output() {
     let pool = task::LocalPoolHandle::new(1);
     let (sender, receiver) = std::sync::mpsc::channel();
 
-    let _ = pool.spawn_pinned(move || {
+    pool.spawn_pinned(move || {
         // Rc is !Send + !Sync
         let local_data = Rc::new("test");
 
@@ -71,6 +73,7 @@ async fn can_spawn_multiple_futures() {
 /// A panic in the spawned task causes the join handle to return an error.
 /// But, you can continue to spawn tasks.
 #[tokio::test]
+#[cfg(panic = "unwind")]
 async fn task_panic_propagates() {
     let pool = task::LocalPoolHandle::new(1);
 
@@ -95,6 +98,7 @@ async fn task_panic_propagates() {
 /// A panic during task creation causes the join handle to return an error.
 /// But, you can continue to spawn tasks.
 #[tokio::test]
+#[cfg(panic = "unwind")]
 async fn callback_panic_does_not_kill_worker() {
     let pool = task::LocalPoolHandle::new(1);
 
@@ -209,7 +213,7 @@ async fn spawn_by_idx() {
         },
         0,
     );
-    let _ = pool.spawn_pinned_by_idx(
+    pool.spawn_pinned_by_idx(
         || async move {
             barrier2.wait().await;
             std::thread::current().id()

@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![warn(rust_2018_idioms)]
 #![cfg(all(feature = "rt", tokio_unstable))]
 
@@ -107,6 +108,30 @@ async fn alternating() {
         map.spawn(i, async {});
         assert_eq!(map.len(), 2);
     }
+}
+
+#[tokio::test]
+async fn test_keys() {
+    use std::collections::HashSet;
+
+    let mut map = JoinMap::new();
+
+    assert_eq!(map.len(), 0);
+    map.spawn(1, async {});
+    assert_eq!(map.len(), 1);
+    map.spawn(2, async {});
+    assert_eq!(map.len(), 2);
+
+    let keys = map.keys().collect::<HashSet<&u32>>();
+    assert!(keys.contains(&1));
+    assert!(keys.contains(&2));
+
+    let _ = map.join_next().await.unwrap();
+    let _ = map.join_next().await.unwrap();
+
+    assert_eq!(map.len(), 0);
+    let keys = map.keys().collect::<HashSet<&u32>>();
+    assert!(keys.is_empty());
 }
 
 #[tokio::test(start_paused = true)]

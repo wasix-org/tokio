@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "wasi", allow(unused))]
+
 use crate::fs::{asyncify, File};
 
 use std::io;
@@ -12,6 +14,9 @@ use std::fs::OpenOptions as StdOpenOptions;
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+#[allow(unused_imports)]
+#[cfg(target_os = "wasi")]
+use std::os::wasi::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 
@@ -25,7 +30,7 @@ use std::os::windows::fs::OpenOptionsExt;
 /// Generally speaking, when using `OpenOptions`, you'll first call [`new`],
 /// then chain calls to methods to set each option, then call [`open`], passing
 /// the path of the file you're trying to open. This will give you a
-/// [`io::Result`][result] with a [`File`] inside that you can further operate
+/// [`io::Result`] with a [`File`] inside that you can further operate
 /// on.
 ///
 /// This is a specialized version of [`std::fs::OpenOptions`] for usage from
@@ -36,11 +41,9 @@ use std::os::windows::fs::OpenOptionsExt;
 ///
 /// [`new`]: OpenOptions::new
 /// [`open`]: OpenOptions::open
-/// [result]: std::io::Result
 /// [`File`]: File
 /// [`File::open`]: File::open
 /// [`File::create`]: File::create
-/// [`std::fs::OpenOptions`]: std::fs::OpenOptions
 ///
 /// # Examples
 ///
@@ -396,6 +399,7 @@ impl OpenOptions {
     }
 
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
+    #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.0
     }
@@ -444,7 +448,6 @@ feature! {
         /// # Examples
         ///
         /// ```no_run
-        /// use libc;
         /// use tokio::fs::OpenOptions;
         /// use std::io;
         ///

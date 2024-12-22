@@ -1,6 +1,6 @@
-cfg_not_wasi! {
-    use crate::future::poll_fn;
+cfg_not_wasi_classic! {
     use crate::net::{to_socket_addrs, ToSocketAddrs};
+    use std::future::poll_fn;
     use std::time::Duration;
 }
 
@@ -12,7 +12,7 @@ use std::fmt;
 use std::io;
 use std::net::{Shutdown, SocketAddr};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -72,7 +72,7 @@ cfg_net! {
 }
 
 impl TcpStream {
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Opens a TCP connection to a remote host.
         ///
         /// `addr` is an address of the remote host. Anything which implements the
@@ -222,10 +222,14 @@ impl TcpStream {
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn Error>> {
     ///     let mut data = [0u8; 12];
+    /// #   if false {
     ///     let listener = TcpListener::bind("127.0.0.1:34254").await?;
-    /// #   let handle = tokio::spawn(async {
-    /// #       let mut stream: TcpStream = TcpStream::connect("127.0.0.1:34254").await.unwrap();
-    /// #       stream.write(b"Hello world!").await.unwrap();
+    /// #   }
+    /// #   let listener = TcpListener::bind("127.0.0.1:0").await?;
+    /// #   let addr = listener.local_addr().unwrap();
+    /// #   let handle = tokio::spawn(async move {
+    /// #       let mut stream: TcpStream = TcpStream::connect(addr).await.unwrap();
+    /// #       stream.write_all(b"Hello world!").await.unwrap();
     /// #   });
     ///     let (tokio_tcp_stream, _) = listener.accept().await?;
     ///     let mut std_tcp_stream = tokio_tcp_stream.into_std()?;
@@ -245,7 +249,7 @@ impl TcpStream {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
             self.io
                 .into_inner()
-                .map(|io| io.into_raw_fd())
+                .map(IntoRawFd::into_raw_fd)
                 .map(|raw_fd| unsafe { std::net::TcpStream::from_raw_fd(raw_fd) })
         }
 
@@ -258,7 +262,7 @@ impl TcpStream {
                 .map(|raw_socket| unsafe { std::net::TcpStream::from_raw_socket(raw_socket) })
         }
 
-        #[cfg(tokio_wasi)]
+        #[cfg(target_os = "wasi")]
         {
             use std::os::wasi::io::{FromRawFd, IntoRawFd};
             self.io
@@ -336,7 +340,7 @@ impl TcpStream {
     /// use tokio::io::{self, ReadBuf};
     /// use tokio::net::TcpStream;
     ///
-    /// use futures::future::poll_fn;
+    /// use std::future::poll_fn;
     ///
     /// #[tokio::main]
     /// async fn main() -> io::Result<()> {
@@ -1056,7 +1060,7 @@ impl TcpStream {
     /// returns the number of bytes peeked.
     ///
     /// Successive calls return the same data. This is accomplished by passing
-    /// `MSG_PEEK` as a flag to the underlying recv system call.
+    /// `MSG_PEEK` as a flag to the underlying `recv` system call.
     ///
     /// # Examples
     ///
@@ -1150,7 +1154,7 @@ impl TcpStream {
         self.io.set_nodelay(nodelay)
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         /// Reads the linger duration for this socket by getting the `SO_LINGER`
         /// option.
         ///
@@ -1174,13 +1178,13 @@ impl TcpStream {
             socket2::SockRef::from(self).linger()
         }
 
-        /// Sets the linger duration of this socket by setting the SO_LINGER option.
+        /// Sets the linger duration of this socket by setting the `SO_LINGER` option.
         ///
         /// This option controls the action taken when a stream has unsent messages and the stream is
-        /// closed. If SO_LINGER is set, the system shall block the process until it can transmit the
+        /// closed. If `SO_LINGER` is set, the system shall block the process until it can transmit the
         /// data or until the time expires.
         ///
-        /// If SO_LINGER is not specified, and the stream is closed, the system handles the call in a
+        /// If `SO_LINGER` is not specified, and the stream is closed, the system handles the call in a
         /// way that allows the process to continue as quickly as possible.
         ///
         /// # Examples
@@ -1274,7 +1278,7 @@ impl TcpStream {
 
     // == Poll IO functions that takes `&self` ==
     //
-    // To read or write without mutable access to the `UnixStream`, combine the
+    // To read or write without mutable access to the `TcpStream`, combine the
     // `poll_read_ready` or `poll_write_ready` methods with the `try_read` or
     // `try_write` methods.
 
@@ -1367,7 +1371,7 @@ impl fmt::Debug for TcpStream {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use super::TcpStream;
     use std::os::unix::prelude::*;
@@ -1378,7 +1382,6 @@ mod sys {
         }
     }
 
-    #[cfg(not(tokio_no_as_fd))]
     impl AsFd for TcpStream {
         fn as_fd(&self) -> BorrowedFd<'_> {
             unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
@@ -1387,9 +1390,7 @@ mod sys {
 }
 
 cfg_windows! {
-    use crate::os::windows::io::{AsRawSocket, RawSocket};
-    #[cfg(not(tokio_no_as_fd))]
-    use crate::os::windows::io::{AsSocket, BorrowedSocket};
+    use crate::os::windows::io::{AsRawSocket, RawSocket, AsSocket, BorrowedSocket};
 
     impl AsRawSocket for TcpStream {
         fn as_raw_socket(&self) -> RawSocket {
@@ -1397,7 +1398,6 @@ cfg_windows! {
         }
     }
 
-    #[cfg(not(tokio_no_as_fd))]
     impl AsSocket for TcpStream {
         fn as_socket(&self) -> BorrowedSocket<'_> {
             unsafe { BorrowedSocket::borrow_raw(self.as_raw_socket()) }
@@ -1405,7 +1405,7 @@ cfg_windows! {
     }
 }
 
-#[cfg(all(tokio_unstable, tokio_wasi))]
+#[cfg(all(tokio_unstable, target_os = "wasi"))]
 mod sys {
     use super::TcpStream;
     use std::os::wasi::prelude::*;
@@ -1416,7 +1416,6 @@ mod sys {
         }
     }
 
-    #[cfg(not(tokio_no_as_fd))]
     impl AsFd for TcpStream {
         fn as_fd(&self) -> BorrowedFd<'_> {
             unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }

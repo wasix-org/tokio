@@ -4,6 +4,7 @@ pub(crate) mod guard;
 mod tree_node;
 
 use crate::loom::sync::Arc;
+use crate::util::MaybeDangling;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -77,11 +78,23 @@ pin_project! {
     /// [`CancellationToken`] by value instead of using a reference.
     #[must_use = "futures do nothing unless polled"]
     pub struct WaitForCancellationFutureOwned {
-        // Since `future` is the first field, it is dropped before the
-        // cancellation_token field. This ensures that the reference inside the
-        // `Notified` remains valid.
+        // This field internally has a reference to the cancellation token, but camouflages
+        // the relationship with `'static`. To avoid Undefined Behavior, we must ensure
+        // that the reference is only used while the cancellation token is still alive. To
+        // do that, we ensure that the future is the first field, so that it is dropped
+        // before the cancellation token.
+        //
+        // We use `MaybeDanglingFuture` here because without it, the compiler could assert
+        // the reference inside `future` to be valid even after the destructor of that
+        // field runs. (Specifically, when the `WaitForCancellationFutureOwned` is passed
+        // as an argument to a function, the reference can be asserted to be valid for the
+        // rest of that function.) To avoid that, we use `MaybeDangling` which tells the
+        // compiler that the reference stored inside it might not be valid.
+        //
+        // See <https://users.rust-lang.org/t/unsafe-code-review-semi-owning-weak-rwlock-t-guard/95706>
+        // for more info.
         #[pin]
-        future: tokio::sync::futures::Notified<'static>,
+        future: MaybeDangling<tokio::sync::futures::Notified<'static>>,
         cancellation_token: CancellationToken,
     }
 }
@@ -120,7 +133,7 @@ impl Default for CancellationToken {
 }
 
 impl CancellationToken {
-    /// Creates a new CancellationToken in the non-cancelled state.
+    /// Creates a new `CancellationToken` in the non-cancelled state.
     pub fn new() -> CancellationToken {
         CancellationToken {
             inner: Arc::new(tree_node::TreeNode::new()),
@@ -228,6 +241,52 @@ impl CancellationToken {
     pub fn drop_guard(self) -> DropGuard {
         DropGuard { inner: Some(self) }
     }
+
+    /// Runs a future to completion and returns its result wrapped inside of an `Option`
+    /// unless the `CancellationToken` is cancelled. In that case the function returns
+    /// `None` and the future gets dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is only cancel safe if `fut` is cancel safe.
+    pub async fn run_until_cancelled<F>(&self, fut: F) -> Option<F::Output>
+    where
+        F: Future,
+    {
+        pin_project! {
+            /// A Future that is resolved once the corresponding [`CancellationToken`]
+            /// is cancelled or a given Future gets resolved. It is biased towards the
+            /// Future completion.
+            #[must_use = "futures do nothing unless polled"]
+            struct RunUntilCancelledFuture<'a, F: Future> {
+                #[pin]
+                cancellation: WaitForCancellationFuture<'a>,
+                #[pin]
+                future: F,
+            }
+        }
+
+        impl<'a, F: Future> Future for RunUntilCancelledFuture<'a, F> {
+            type Output = Option<F::Output>;
+
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                let this = self.project();
+                if let Poll::Ready(res) = this.future.poll(cx) {
+                    Poll::Ready(Some(res))
+                } else if this.cancellation.poll(cx).is_ready() {
+                    Poll::Ready(None)
+                } else {
+                    Poll::Pending
+                }
+            }
+        }
+
+        RunUntilCancelledFuture {
+            cancellation: self.cancelled(),
+            future: fut,
+        }
+        .await
+    }
 }
 
 // ===== impl WaitForCancellationFuture =====
@@ -279,7 +338,7 @@ impl WaitForCancellationFutureOwned {
             // # Safety
             //
             // cancellation_token is dropped after future due to the field ordering.
-            future: unsafe { Self::new_future(&cancellation_token) },
+            future: MaybeDangling::new(unsafe { Self::new_future(&cancellation_token) }),
             cancellation_token,
         }
     }
@@ -320,8 +379,9 @@ impl Future for WaitForCancellationFutureOwned {
             // # Safety
             //
             // cancellation_token is dropped after future due to the field ordering.
-            this.future
-                .set(unsafe { Self::new_future(this.cancellation_token) });
+            this.future.set(MaybeDangling::new(unsafe {
+                Self::new_future(this.cancellation_token)
+            }));
         }
     }
 }

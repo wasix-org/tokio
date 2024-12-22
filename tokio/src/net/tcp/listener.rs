@@ -1,14 +1,14 @@
 use crate::io::{Interest, PollEvented};
 use crate::net::tcp::TcpStream;
 
-cfg_not_wasi! {
+cfg_not_wasi_classic! {
     use crate::net::{to_socket_addrs, ToSocketAddrs};
 }
 
 use std::fmt;
 use std::io;
 use std::net::{self, SocketAddr};
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_net! {
     /// A TCP socket server, listening for connections.
@@ -57,8 +57,8 @@ cfg_net! {
 }
 
 impl TcpListener {
-    cfg_not_wasi! {
-        /// Creates a new TcpListener, which will be bound to the specified address.
+    cfg_not_wasi_classic! {
+        /// Creates a new `TcpListener`, which will be bound to the specified address.
         ///
         /// The returned listener is ready for accepting connections.
         ///
@@ -268,7 +268,7 @@ impl TcpListener {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
             self.io
                 .into_inner()
-                .map(|io| io.into_raw_fd())
+                .map(IntoRawFd::into_raw_fd)
                 .map(|raw_fd| unsafe { std::net::TcpListener::from_raw_fd(raw_fd) })
         }
 
@@ -281,7 +281,7 @@ impl TcpListener {
                 .map(|raw_socket| unsafe { std::net::TcpListener::from_raw_socket(raw_socket) })
         }
 
-        #[cfg(tokio_wasi)]
+        #[cfg(target_os = "wasi")]
         {
             use std::os::wasi::io::{FromRawFd, IntoRawFd};
             self.io
@@ -291,7 +291,7 @@ impl TcpListener {
         }
     }
 
-    cfg_not_wasi! {
+    cfg_not_wasi_classic! {
         pub(crate) fn new(listener: mio::net::TcpListener) -> io::Result<TcpListener> {
             let io = PollEvented::new(listener)?;
             Ok(TcpListener { io })
@@ -396,7 +396,7 @@ impl fmt::Debug for TcpListener {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_vendor = "wasmer"))]
 mod sys {
     use super::TcpListener;
     use std::os::unix::prelude::*;
@@ -407,7 +407,6 @@ mod sys {
         }
     }
 
-    #[cfg(not(tokio_no_as_fd))]
     impl AsFd for TcpListener {
         fn as_fd(&self) -> BorrowedFd<'_> {
             unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
@@ -416,7 +415,7 @@ mod sys {
 }
 
 cfg_unstable! {
-    #[cfg(tokio_wasi)]
+    #[cfg(target_os = "wasi")]
     mod sys {
         use super::TcpListener;
         use std::os::wasi::prelude::*;
@@ -427,7 +426,6 @@ cfg_unstable! {
             }
         }
 
-        #[cfg(not(tokio_no_as_fd))]
         impl AsFd for TcpListener {
             fn as_fd(&self) -> BorrowedFd<'_> {
                 unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
@@ -437,9 +435,7 @@ cfg_unstable! {
 }
 
 cfg_windows! {
-    use crate::os::windows::io::{AsRawSocket, RawSocket};
-    #[cfg(not(tokio_no_as_fd))]
-    use crate::os::windows::io::{AsSocket, BorrowedSocket};
+    use crate::os::windows::io::{AsRawSocket, RawSocket, AsSocket, BorrowedSocket};
 
     impl AsRawSocket for TcpListener {
         fn as_raw_socket(&self) -> RawSocket {
@@ -447,7 +443,6 @@ cfg_windows! {
         }
     }
 
-    #[cfg(not(tokio_no_as_fd))]
     impl AsSocket for TcpListener {
         fn as_socket(&self) -> BorrowedSocket<'_> {
             unsafe { BorrowedSocket::borrow_raw(self.as_raw_socket()) }

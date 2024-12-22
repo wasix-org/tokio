@@ -1,4 +1,4 @@
-#![cfg(all(feature = "full", not(tokio_wasi)))] // Wasi does not support direct socket operations
+#![cfg(all(feature = "full", not(target_os = "wasi")))] // Wasi does not support direct socket operations
 
 use tokio::net;
 use tokio_test::assert_ok;
@@ -23,6 +23,7 @@ async fn lookup_str_socket_addr() {
 }
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)] // No `getaddrinfo` in miri.
 async fn resolve_dns() -> io::Result<()> {
     let mut hosts = net::lookup_host("localhost:3000").await?;
     let host = hosts.next().unwrap();

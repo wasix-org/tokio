@@ -1,3 +1,105 @@
+# 0.7.12 (September 5th, 2024)
+
+This release bumps the MSRV to 1.70. ([#6645])
+
+### Added
+- sync: Add `run_until_cancelled` to `tokio_util::sync::CancellationToken` ([#6618])
+- task: add `AbortOnDropHandle` type ([#6786])
+
+### Changed
+- deps: no default features for hashbrown ([#6541])
+- time: wake `DelayQueue` when removing last item ([#6752])
+- deps: enable the full feature when compiled for the playground ([#6818])
+
+### Documented
+- task: fix typo in `TaskTracker` docs ([#6792])
+
+[#6645]: https://github.com/tokio-rs/tokio/pull/6645
+[#6541]: https://github.com/tokio-rs/tokio/pull/6541
+[#6618]: https://github.com/tokio-rs/tokio/pull/6618
+[#6752]: https://github.com/tokio-rs/tokio/pull/6752
+[#6786]: https://github.com/tokio-rs/tokio/pull/6786
+[#6792]: https://github.com/tokio-rs/tokio/pull/6792
+[#6818]: https://github.com/tokio-rs/tokio/pull/6818
+
+# 0.7.11 (May 4th, 2024)
+
+This release updates the MSRV to 1.63. ([#6126])
+
+### Added
+
+- either: implement `Sink` for `Either` ([#6239])
+- time: add `DelayQueue::deadline` ([#6163])
+- time: add `FutureExt::timeout` ([#6276])
+
+### Changed
+
+- codec: assert compatibility between `LengthDelimitedCodec` options ([#6414])
+- codec: make tracing feature optional for codecs ([#6434])
+- io: add `T: ?Sized` to `tokio_util::io::poll_read_buf` ([#6441])
+- sync: remove `'static` bound on `impl Sink for PollSender` ([#6397])
+
+### Documented
+
+- codec: add examples for `FramedRead` and `FramedWrite` ([#6310])
+- codec: document cancel safety of `SinkExt::send` and `StreamExt::next` ([#6417])
+
+[#6126]: https://github.com/tokio-rs/tokio/pull/6126
+[#6163]: https://github.com/tokio-rs/tokio/pull/6163
+[#6239]: https://github.com/tokio-rs/tokio/pull/6239
+[#6276]: https://github.com/tokio-rs/tokio/pull/6276
+[#6310]: https://github.com/tokio-rs/tokio/pull/6310
+[#6397]: https://github.com/tokio-rs/tokio/pull/6397
+[#6414]: https://github.com/tokio-rs/tokio/pull/6414
+[#6417]: https://github.com/tokio-rs/tokio/pull/6417
+[#6434]: https://github.com/tokio-rs/tokio/pull/6434
+[#6441]: https://github.com/tokio-rs/tokio/pull/6441
+
+# 0.7.10 (October 24th, 2023)
+
+### Added
+
+- task: add `TaskTracker` ([#6033])
+- task: add `JoinMap::keys` ([#6046])
+- io: implement `Seek` for `SyncIoBridge` ([#6058])
+
+### Changed
+
+- deps: update hashbrown to 0.14 ([#6102])
+
+[#6033]: https://github.com/tokio-rs/tokio/pull/6033
+[#6046]: https://github.com/tokio-rs/tokio/pull/6046
+[#6058]: https://github.com/tokio-rs/tokio/pull/6058
+[#6102]: https://github.com/tokio-rs/tokio/pull/6102
+
+# 0.7.9 (September 20th, 2023)
+
+### Added
+
+- io: add passthrough `AsyncRead`/`AsyncWrite` to `InspectWriter`/`InspectReader` ([#5739])
+- task: add spawn blocking methods to `JoinMap` ([#5797])
+- io: pass through traits for `StreamReader` and `SinkWriter` ([#5941])
+- io: add `SyncIoBridge::into_inner` ([#5971])
+
+### Fixed
+
+- sync: handle possibly dangling reference safely ([#5812])
+- util: fix broken intra-doc link ([#5849])
+- compat: fix clippy warnings ([#5891])
+
+### Documented
+
+- codec: Specify the line ending of `LinesCodec` ([#5982])
+
+[#5739]: https://github.com/tokio-rs/tokio/pull/5739
+[#5797]: https://github.com/tokio-rs/tokio/pull/5797
+[#5941]: https://github.com/tokio-rs/tokio/pull/5941
+[#5971]: https://github.com/tokio-rs/tokio/pull/5971
+[#5812]: https://github.com/tokio-rs/tokio/pull/5812
+[#5849]: https://github.com/tokio-rs/tokio/pull/5849
+[#5891]: https://github.com/tokio-rs/tokio/pull/5891
+[#5982]: https://github.com/tokio-rs/tokio/pull/5982
+
 # 0.7.8 (April 25th, 2023)
 
 This release bumps the MSRV of tokio-util to 1.56.

@@ -25,8 +25,6 @@
 //! assert!(task.poll().is_ready(), "Task was not ready!");
 //! ```
 
-#![allow(clippy::mutex_atomic)]
-
 use std::future::Future;
 use std::mem;
 use std::ops;
@@ -51,6 +49,7 @@ pub fn spawn<T>(task: T) -> Spawn<T> {
 /// Future spawned on a mock task that can be used to poll the future or stream
 /// without needing pinning or context types.
 #[derive(Debug)]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Spawn<T> {
     task: MockTask,
     future: Pin<Box<T>>,
@@ -127,7 +126,7 @@ impl<T: Future> Spawn<T> {
 }
 
 impl<T: Stream> Spawn<T> {
-    /// If `T` is a [`Stream`] then poll_next it. This will handle pinning and the context
+    /// If `T` is a [`Stream`] then `poll_next` it. This will handle pinning and the context
     /// type for the stream.
     pub fn poll_next(&mut self) -> Poll<Option<T::Item>> {
         let stream = self.future.as_mut();
@@ -148,6 +147,10 @@ impl<T: Stream> Stream for Spawn<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.future.as_mut().poll_next(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.future.size_hint()
     }
 }
 

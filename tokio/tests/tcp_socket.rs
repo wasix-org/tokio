@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", not(tokio_wasi)))] // Wasi doesn't support bind
+#![cfg(all(feature = "full", not(target_os = "wasi"), not(miri)))] // Wasi doesn't support bind
+                                                                   // No `socket` on miri.
 
 use std::time::Duration;
 use tokio::net::TcpSocket;
@@ -24,7 +25,6 @@ async fn basic_usage_v4() {
 }
 
 #[tokio::test]
-#[cfg(not(tokio_no_ipv6))]
 async fn basic_usage_v6() {
     // Create server
     let addr = assert_ok!("[::1]:0".parse());

@@ -62,7 +62,7 @@ impl Budget {
     }
 
     fn has_remaining(self) -> bool {
-        self.0.map(|budget| budget > 0).unwrap_or(true)
+        self.0.map_or(true, |budget| budget > 0)
     }
 }
 
@@ -119,17 +119,6 @@ cfg_rt_multi_thread! {
     pub(crate) fn set(budget: Budget) {
         let _ = context::budget(|cell| cell.set(budget));
     }
-
-    /// Consume one unit of progress from the current task's budget.
-    pub(crate) fn consume_one() {
-        let _ = context::budget(|cell| {
-            let mut budget = cell.get();
-            if let Some(ref mut counter) = budget.0 {
-                *counter = counter.saturating_sub(1);
-            }
-            cell.set(budget);
-        });
-    }
 }
 
 cfg_rt! {
@@ -146,8 +135,11 @@ cfg_rt! {
 }
 
 cfg_coop! {
+    use pin_project_lite::pin_project;
     use std::cell::Cell;
-    use std::task::{Context, Poll};
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::task::{ready, Context, Poll};
 
     #[must_use]
     pub(crate) struct RestoreOnPending(Cell<Budget>);
@@ -208,16 +200,16 @@ cfg_coop! {
     }
 
     cfg_rt! {
-        cfg_metrics! {
+        cfg_unstable_metrics! {
             #[inline(always)]
             fn inc_budget_forced_yield_count() {
-                if let Ok(handle) = context::try_current() {
+                let _ = context::with_current(|handle| {
                     handle.scheduler_metrics().inc_budget_forced_yield_count();
-                }
+                });
             }
         }
 
-        cfg_not_metrics! {
+        cfg_not_unstable_metrics! {
             #[inline(always)]
             fn inc_budget_forced_yield_count() {}
         }
@@ -251,13 +243,51 @@ cfg_coop! {
             self.0.is_none()
         }
     }
+
+    pin_project! {
+        /// Future wrapper to ensure cooperative scheduling.
+        ///
+        /// When being polled `poll_proceed` is called before the inner future is polled to check
+        /// if the inner future has exceeded its budget. If the inner future resolves, this will
+        /// automatically call `RestoreOnPending::made_progress` before resolving this future with
+        /// the result of the inner one. If polling the inner future is pending, polling this future
+        /// type will also return a `Poll::Pending`.
+        #[must_use = "futures do nothing unless polled"]
+        pub(crate) struct Coop<F: Future> {
+            #[pin]
+            pub(crate) fut: F,
+        }
+    }
+
+    impl<F: Future> Future for Coop<F> {
+        type Output = F::Output;
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let coop = ready!(poll_proceed(cx));
+            let me = self.project();
+            if let Poll::Ready(ret) = me.fut.poll(cx) {
+                coop.made_progress();
+                Poll::Ready(ret)
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+
+    /// Run a future with a budget constraint for cooperative scheduling.
+    /// If the future exceeds its budget while being polled, control is yielded back to the
+    /// runtime.
+    #[inline]
+    pub(crate) fn cooperative<F: Future>(fut: F) -> Coop<F> {
+        Coop { fut }
+    }
 }
 
 #[cfg(all(test, not(loom)))]
 mod test {
     use super::*;
 
-    #[cfg(tokio_wasm_not_wasi)]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     fn get() -> Budget {
@@ -266,7 +296,7 @@ mod test {
 
     #[test]
     fn budgeting() {
-        use futures::future::poll_fn;
+        use std::future::poll_fn;
         use tokio_test::*;
 
         assert!(get().0.is_none());
@@ -323,7 +353,7 @@ mod test {
             }
 
             let mut task = task::spawn(poll_fn(|cx| {
-                let coop = ready!(poll_proceed(cx));
+                let coop = std::task::ready!(poll_proceed(cx));
                 coop.made_progress();
                 Poll::Ready(())
             }));

@@ -52,8 +52,7 @@ impl<T> Mutex<T> {
     }
 
     #[inline]
-    #[cfg(all(feature = "parking_lot", not(all(loom, test))))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "parking_lot",))))]
+    #[cfg(not(all(loom, test)))]
     pub(crate) const fn const_new(t: T) -> Mutex<T> {
         Mutex(PhantomData, parking_lot::const_mutex(t))
     }
@@ -97,12 +96,20 @@ impl<T> RwLock<T> {
         RwLock(PhantomData, parking_lot::RwLock::new(t))
     }
 
-    pub(crate) fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
-        Ok(RwLockReadGuard(PhantomData, self.1.read()))
+    pub(crate) fn read(&self) -> RwLockReadGuard<'_, T> {
+        RwLockReadGuard(PhantomData, self.1.read())
     }
 
-    pub(crate) fn write(&self) -> LockResult<RwLockWriteGuard<'_, T>> {
-        Ok(RwLockWriteGuard(PhantomData, self.1.write()))
+    pub(crate) fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
+        Some(RwLockReadGuard(PhantomData, self.1.read()))
+    }
+
+    pub(crate) fn write(&self) -> RwLockWriteGuard<'_, T> {
+        RwLockWriteGuard(PhantomData, self.1.write())
+    }
+
+    pub(crate) fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
+        Some(RwLockWriteGuard(PhantomData, self.1.write()))
     }
 }
 

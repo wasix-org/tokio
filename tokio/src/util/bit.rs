@@ -16,7 +16,7 @@ impl Pack {
 
     /// Value is packed in the `width` more-significant bits.
     pub(crate) const fn then(&self, width: u32) -> Pack {
-        let shift = pointer_width() - self.mask.leading_zeros();
+        let shift = usize::BITS - self.mask.leading_zeros();
         let mask = mask_for(width) << shift;
 
         Pack { mask, shift }
@@ -24,7 +24,7 @@ impl Pack {
 
     /// Width, in bits, dedicated to storing the value.
     pub(crate) const fn width(&self) -> u32 {
-        pointer_width() - (self.mask >> self.shift).leading_zeros()
+        usize::BITS - (self.mask >> self.shift).leading_zeros()
     }
 
     /// Max representable value.
@@ -35,14 +35,6 @@ impl Pack {
     pub(crate) fn pack(&self, value: usize, base: usize) -> usize {
         assert!(value <= self.max_value());
         (base & !self.mask) | (value << self.shift)
-    }
-
-    /// Packs the value with `base`, losing any bits of `value` that fit.
-    ///
-    /// If `value` is larger than the max value that can be represented by the
-    /// allotted width, the most significant bits are truncated.
-    pub(crate) fn pack_lossy(&self, value: usize, base: usize) -> usize {
-        self.pack(value & self.max_value(), base)
     }
 
     pub(crate) fn unpack(&self, src: usize) -> usize {
@@ -58,11 +50,6 @@ impl fmt::Debug for Pack {
             self.mask, self.shift
         )
     }
-}
-
-/// Returns the width of a pointer in bits.
-pub(crate) const fn pointer_width() -> u32 {
-    std::mem::size_of::<usize>() as u32 * 8
 }
 
 /// Returns a `usize` with the right-most `n` bits set.

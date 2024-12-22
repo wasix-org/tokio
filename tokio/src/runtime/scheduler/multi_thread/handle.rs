@@ -4,10 +4,17 @@ use crate::runtime::scheduler::multi_thread::worker;
 use crate::runtime::{
     blocking, driver,
     task::{self, JoinHandle},
+    TaskHooks, TaskMeta,
 };
 use crate::util::RngSeedGenerator;
 
 use std::fmt;
+
+mod metrics;
+
+cfg_taskdump! {
+    mod taskdump;
+}
 
 /// Handle to the multi thread scheduler
 pub(crate) struct Handle {
@@ -22,6 +29,9 @@ pub(crate) struct Handle {
 
     /// Current random number generator seed
     pub(crate) seed_generator: RngSeedGenerator,
+
+    /// User-supplied hooks to invoke for things
+    pub(crate) task_hooks: TaskHooks,
 }
 
 impl Handle {
@@ -45,52 +55,23 @@ impl Handle {
     {
         let (handle, notified) = me.shared.owned.bind(future, me.clone(), id);
 
-        if let Some(notified) = notified {
-            me.schedule_task(notified, false);
-        }
+        me.task_hooks.spawn(&TaskMeta {
+            id,
+            _phantom: Default::default(),
+        });
+
+        me.schedule_option_task_without_yield(notified);
 
         handle
     }
 }
 
-cfg_metrics! {
-    use crate::runtime::{SchedulerMetrics, WorkerMetrics};
+cfg_unstable! {
+    use std::num::NonZeroU64;
 
     impl Handle {
-        pub(crate) fn num_workers(&self) -> usize {
-            self.shared.worker_metrics.len()
-        }
-
-        pub(crate) fn num_blocking_threads(&self) -> usize {
-            self.blocking_spawner.num_threads()
-        }
-
-        pub(crate) fn num_idle_blocking_threads(&self) -> usize {
-            self.blocking_spawner.num_idle_threads()
-        }
-
-        pub(crate) fn active_tasks_count(&self) -> usize {
-            self.shared.owned.active_tasks_count()
-        }
-
-        pub(crate) fn scheduler_metrics(&self) -> &SchedulerMetrics {
-            &self.shared.scheduler_metrics
-        }
-
-        pub(crate) fn worker_metrics(&self, worker: usize) -> &WorkerMetrics {
-            &self.shared.worker_metrics[worker]
-        }
-
-        pub(crate) fn injection_queue_depth(&self) -> usize {
-            self.shared.injection_queue_depth()
-        }
-
-        pub(crate) fn worker_local_queue_depth(&self, worker: usize) -> usize {
-            self.shared.worker_local_queue_depth(worker)
-        }
-
-        pub(crate) fn blocking_queue_depth(&self) -> usize {
-            self.blocking_spawner.queue_depth()
+        pub(crate) fn owned_id(&self) -> NonZeroU64 {
+            self.shared.owned.id
         }
     }
 }

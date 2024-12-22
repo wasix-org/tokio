@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", not(tokio_wasi)))] // WASI does not support all fs operations
+#![cfg(all(feature = "full", not(target_os = "wasi")))] // WASI does not support all fs operations
 
 use tokio::fs;
 
@@ -7,6 +7,7 @@ use std::io::Write;
 use tempfile::tempdir;
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)] // No `linkat` in miri.
 async fn test_hard_link() {
     let dir = tempdir().unwrap();
     let src = dir.path().join("src.txt");

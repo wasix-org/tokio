@@ -1,8 +1,8 @@
-use futures_core::{ready, Stream};
+use futures_core::Stream;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore, TryAcquireError};
 
 use super::ReusableBoxFuture;
@@ -29,7 +29,7 @@ impl PollSemaphore {
 
     /// Closes the semaphore.
     pub fn close(&self) {
-        self.semaphore.close()
+        self.semaphore.close();
     }
 
     /// Obtain a clone of the inner semaphore.

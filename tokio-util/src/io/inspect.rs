@@ -1,8 +1,7 @@
-use futures_core::ready;
 use pin_project_lite::pin_project;
 use std::io::{IoSlice, Result};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -18,7 +17,7 @@ pin_project! {
 }
 
 impl<R, F> InspectReader<R, F> {
-    /// Create a new InspectReader, wrapping `reader` and calling `f` for the
+    /// Create a new `InspectReader`, wrapping `reader` and calling `f` for the
     /// new data supplied by each read call.
     ///
     /// The closure will only be called with an empty slice if the inner reader
@@ -52,6 +51,42 @@ impl<R: AsyncRead, F: FnMut(&[u8])> AsyncRead for InspectReader<R, F> {
     }
 }
 
+impl<R: AsyncWrite, F> AsyncWrite for InspectReader<R, F> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::result::Result<usize, std::io::Error>> {
+        self.project().reader.poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<(), std::io::Error>> {
+        self.project().reader.poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<(), std::io::Error>> {
+        self.project().reader.poll_shutdown(cx)
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<Result<usize>> {
+        self.project().reader.poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.reader.is_write_vectored()
+    }
+}
+
 pin_project! {
     /// An adapter that lets you inspect the data that's being written.
     ///
@@ -64,7 +99,7 @@ pin_project! {
 }
 
 impl<W, F> InspectWriter<W, F> {
-    /// Create a new InspectWriter, wrapping `write` and calling `f` for the
+    /// Create a new `InspectWriter`, wrapping `write` and calling `f` for the
     /// data successfully written by each write call.
     ///
     /// The closure `f` will never be called with an empty slice. A vectored
@@ -130,5 +165,15 @@ impl<W: AsyncWrite, F: FnMut(&[u8])> AsyncWrite for InspectWriter<W, F> {
 
     fn is_write_vectored(&self) -> bool {
         self.writer.is_write_vectored()
+    }
+}
+
+impl<W: AsyncRead, F> AsyncRead for InspectWriter<W, F> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.project().writer.poll_read(cx, buf)
     }
 }

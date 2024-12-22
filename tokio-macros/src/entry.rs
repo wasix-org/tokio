@@ -20,7 +20,32 @@ impl RuntimeFlavor {
             "single_thread" => Err("The single threaded runtime flavor is called `current_thread`.".to_string()),
             "basic_scheduler" => Err("The `basic_scheduler` runtime flavor has been renamed to `current_thread`.".to_string()),
             "threaded_scheduler" => Err("The `threaded_scheduler` runtime flavor has been renamed to `multi_thread`.".to_string()),
-            _ => Err(format!("No such runtime flavor `{}`. The runtime flavors are `current_thread` and `multi_thread`.", s)),
+            _ => Err(format!("No such runtime flavor `{s}`. The runtime flavors are `current_thread` and `multi_thread`.")),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum UnhandledPanic {
+    Ignore,
+    ShutdownRuntime,
+}
+
+impl UnhandledPanic {
+    fn from_str(s: &str) -> Result<UnhandledPanic, String> {
+        match s {
+            "ignore" => Ok(UnhandledPanic::Ignore),
+            "shutdown_runtime" => Ok(UnhandledPanic::ShutdownRuntime),
+            _ => Err(format!("No such unhandled panic behavior `{s}`. The unhandled panic behaviors are `ignore` and `shutdown_runtime`.")),
+        }
+    }
+
+    fn into_tokens(self, crate_path: &TokenStream) -> TokenStream {
+        match self {
+            UnhandledPanic::Ignore => quote! { #crate_path::runtime::UnhandledPanic::Ignore },
+            UnhandledPanic::ShutdownRuntime => {
+                quote! { #crate_path::runtime::UnhandledPanic::ShutdownRuntime }
+            }
         }
     }
 }
@@ -30,6 +55,7 @@ struct FinalConfig {
     worker_threads: Option<usize>,
     start_paused: Option<bool>,
     crate_name: Option<Path>,
+    unhandled_panic: Option<UnhandledPanic>,
 }
 
 /// Config used in case of the attribute not being able to build a valid config
@@ -38,6 +64,7 @@ const DEFAULT_ERROR_CONFIG: FinalConfig = FinalConfig {
     worker_threads: None,
     start_paused: None,
     crate_name: None,
+    unhandled_panic: None,
 };
 
 struct Configuration {
@@ -48,6 +75,7 @@ struct Configuration {
     start_paused: Option<(bool, Span)>,
     is_test: bool,
     crate_name: Option<Path>,
+    unhandled_panic: Option<(UnhandledPanic, Span)>,
 }
 
 impl Configuration {
@@ -63,6 +91,7 @@ impl Configuration {
             start_paused: None,
             is_test,
             crate_name: None,
+            unhandled_panic: None,
         }
     }
 
@@ -117,6 +146,25 @@ impl Configuration {
         Ok(())
     }
 
+    fn set_unhandled_panic(
+        &mut self,
+        unhandled_panic: syn::Lit,
+        span: Span,
+    ) -> Result<(), syn::Error> {
+        if self.unhandled_panic.is_some() {
+            return Err(syn::Error::new(
+                span,
+                "`unhandled_panic` set multiple times.",
+            ));
+        }
+
+        let unhandled_panic = parse_string(unhandled_panic, span, "unhandled_panic")?;
+        let unhandled_panic =
+            UnhandledPanic::from_str(&unhandled_panic).map_err(|err| syn::Error::new(span, err))?;
+        self.unhandled_panic = Some((unhandled_panic, span));
+        Ok(())
+    }
+
     fn macro_name(&self) -> &'static str {
         if self.is_test {
             "tokio::test"
@@ -126,22 +174,22 @@ impl Configuration {
     }
 
     fn build(&self) -> Result<FinalConfig, syn::Error> {
-        let flavor = self.flavor.unwrap_or(self.default_flavor);
-        use RuntimeFlavor::*;
+        use RuntimeFlavor as F;
 
+        let flavor = self.flavor.unwrap_or(self.default_flavor);
         let worker_threads = match (flavor, self.worker_threads) {
-            (CurrentThread, Some((_, worker_threads_span))) => {
+            (F::CurrentThread, Some((_, worker_threads_span))) => {
                 let msg = format!(
                     "The `worker_threads` option requires the `multi_thread` runtime flavor. Use `#[{}(flavor = \"multi_thread\")]`",
                     self.macro_name(),
                 );
                 return Err(syn::Error::new(worker_threads_span, msg));
             }
-            (CurrentThread, None) => None,
-            (Threaded, worker_threads) if self.rt_multi_thread_available => {
+            (F::CurrentThread, None) => None,
+            (F::Threaded, worker_threads) if self.rt_multi_thread_available => {
                 worker_threads.map(|(val, _span)| val)
             }
-            (Threaded, _) => {
+            (F::Threaded, _) => {
                 let msg = if self.flavor.is_none() {
                     "The default runtime flavor is `multi_thread`, but the `rt-multi-thread` feature is disabled."
                 } else {
@@ -152,14 +200,26 @@ impl Configuration {
         };
 
         let start_paused = match (flavor, self.start_paused) {
-            (Threaded, Some((_, start_paused_span))) => {
+            (F::Threaded, Some((_, start_paused_span))) => {
                 let msg = format!(
                     "The `start_paused` option requires the `current_thread` runtime flavor. Use `#[{}(flavor = \"current_thread\")]`",
                     self.macro_name(),
                 );
                 return Err(syn::Error::new(start_paused_span, msg));
             }
-            (CurrentThread, Some((start_paused, _))) => Some(start_paused),
+            (F::CurrentThread, Some((start_paused, _))) => Some(start_paused),
+            (_, None) => None,
+        };
+
+        let unhandled_panic = match (flavor, self.unhandled_panic) {
+            (F::Threaded, Some((_, unhandled_panic_span))) => {
+                let msg = format!(
+                    "The `unhandled_panic` option requires the `current_thread` runtime flavor. Use `#[{}(flavor = \"current_thread\")]`",
+                    self.macro_name(),
+                );
+                return Err(syn::Error::new(unhandled_panic_span, msg));
+            }
+            (F::CurrentThread, Some((unhandled_panic, _))) => Some(unhandled_panic),
             (_, None) => None,
         };
 
@@ -168,6 +228,7 @@ impl Configuration {
             flavor,
             worker_threads,
             start_paused,
+            unhandled_panic,
         })
     }
 }
@@ -178,12 +239,12 @@ fn parse_int(int: syn::Lit, span: Span, field: &str) -> Result<usize, syn::Error
             Ok(value) => Ok(value),
             Err(e) => Err(syn::Error::new(
                 span,
-                format!("Failed to parse value of `{}` as integer: {}", field, e),
+                format!("Failed to parse value of `{field}` as integer: {e}"),
             )),
         },
         _ => Err(syn::Error::new(
             span,
-            format!("Failed to parse value of `{}` as integer.", field),
+            format!("Failed to parse value of `{field}` as integer."),
         )),
     }
 }
@@ -194,7 +255,7 @@ fn parse_string(int: syn::Lit, span: Span, field: &str) -> Result<String, syn::E
         syn::Lit::Verbatim(s) => Ok(s.to_string()),
         _ => Err(syn::Error::new(
             span,
-            format!("Failed to parse value of `{}` as string.", field),
+            format!("Failed to parse value of `{field}` as string."),
         )),
     }
 }
@@ -214,7 +275,7 @@ fn parse_path(lit: syn::Lit, span: Span, field: &str) -> Result<Path, syn::Error
         }
         _ => Err(syn::Error::new(
             span,
-            format!("Failed to parse value of `{}` as path.", field),
+            format!("Failed to parse value of `{field}` as path."),
         )),
     }
 }
@@ -224,7 +285,7 @@ fn parse_bool(bool: syn::Lit, span: Span, field: &str) -> Result<bool, syn::Erro
         syn::Lit::Bool(b) => Ok(b.value),
         _ => Err(syn::Error::new(
             span,
-            format!("Failed to parse value of `{}` as bool.", field),
+            format!("Failed to parse value of `{field}` as bool."),
         )),
     }
 }
@@ -275,10 +336,13 @@ fn build_config(
                     "crate" => {
                         config.set_crate_name(lit.clone(), syn::spanned::Spanned::span(lit))?;
                     }
+                    "unhandled_panic" => {
+                        config
+                            .set_unhandled_panic(lit.clone(), syn::spanned::Spanned::span(lit))?;
+                    }
                     name => {
                         let msg = format!(
-                            "Unknown attribute {} is specified; expected one of: `flavor`, `worker_threads`, `start_paused`, `crate`",
-                            name,
+                            "Unknown attribute {name} is specified; expected one of: `flavor`, `worker_threads`, `start_paused`, `crate`, `unhandled_panic`",
                         );
                         return Err(syn::Error::new_spanned(namevalue, msg));
                     }
@@ -293,21 +357,19 @@ fn build_config(
                 let msg = match name.as_str() {
                     "threaded_scheduler" | "multi_thread" => {
                         format!(
-                            "Set the runtime flavor with #[{}(flavor = \"multi_thread\")].",
-                            macro_name
+                            "Set the runtime flavor with #[{macro_name}(flavor = \"multi_thread\")]."
                         )
                     }
                     "basic_scheduler" | "current_thread" | "single_threaded" => {
                         format!(
-                            "Set the runtime flavor with #[{}(flavor = \"current_thread\")].",
-                            macro_name
+                            "Set the runtime flavor with #[{macro_name}(flavor = \"current_thread\")]."
                         )
                     }
-                    "flavor" | "worker_threads" | "start_paused" => {
-                        format!("The `{}` attribute requires an argument.", name)
+                    "flavor" | "worker_threads" | "start_paused" | "crate" | "unhandled_panic" => {
+                        format!("The `{name}` attribute requires an argument.")
                     }
                     name => {
-                        format!("Unknown attribute {} is specified; expected one of: `flavor`, `worker_threads`, `start_paused`, `crate`", name)
+                        format!("Unknown attribute {name} is specified; expected one of: `flavor`, `worker_threads`, `start_paused`, `crate`, `unhandled_panic`.")
                     }
                 };
                 return Err(syn::Error::new_spanned(path, msg));
@@ -354,13 +416,17 @@ fn parse_knobs(mut input: ItemFn, is_test: bool, config: FinalConfig) -> TokenSt
         },
     };
     if let Some(v) = config.worker_threads {
-        rt = quote! { #rt.worker_threads(#v) };
+        rt = quote_spanned! {last_stmt_start_span=> #rt.worker_threads(#v) };
     }
     if let Some(v) = config.start_paused {
-        rt = quote! { #rt.start_paused(#v) };
+        rt = quote_spanned! {last_stmt_start_span=> #rt.start_paused(#v) };
+    }
+    if let Some(v) = config.unhandled_panic {
+        let unhandled_panic = v.into_tokens(&crate_path);
+        rt = quote_spanned! {last_stmt_start_span=> #rt.unhandled_panic(#unhandled_panic) };
     }
 
-    let header = if is_test {
+    let generated_attrs = if is_test {
         quote! {
             #[::core::prelude::v1::test]
         }
@@ -369,8 +435,9 @@ fn parse_knobs(mut input: ItemFn, is_test: bool, config: FinalConfig) -> TokenSt
     };
 
     let body_ident = quote! { body };
+    // This explicit `return` is intentional. See tokio-rs/tokio#4636
     let last_block = quote_spanned! {last_stmt_end_span=>
-        #[allow(clippy::expect_used, clippy::diverging_sub_expression)]
+        #[allow(clippy::expect_used, clippy::diverging_sub_expression, clippy::needless_return)]
         {
             return #rt
                 .enable_all()
@@ -402,7 +469,7 @@ fn parse_knobs(mut input: ItemFn, is_test: bool, config: FinalConfig) -> TokenSt
         quote! {
             let body = async #body;
             #crate_path::pin!(body);
-            let body: ::std::pin::Pin<&mut dyn ::std::future::Future<Output = #output_type>> = body;
+            let body: ::core::pin::Pin<&mut dyn ::core::future::Future<Output = #output_type>> = body;
         }
     } else {
         quote! {
@@ -410,7 +477,7 @@ fn parse_knobs(mut input: ItemFn, is_test: bool, config: FinalConfig) -> TokenSt
         }
     };
 
-    input.into_tokens(header, body, last_block)
+    input.into_tokens(generated_attrs, body, last_block)
 }
 
 fn token_stream_with_error(mut tokens: TokenStream, error: syn::Error) -> TokenStream {
@@ -418,7 +485,6 @@ fn token_stream_with_error(mut tokens: TokenStream, error: syn::Error) -> TokenS
     tokens
 }
 
-#[cfg(not(test))] // Work around for rust-lang/rust#62127
 pub(crate) fn main(args: TokenStream, item: TokenStream, rt_multi_thread: bool) -> TokenStream {
     // If any of the steps for this macro fail, we still want to expand to an item that is as close
     // to the expected output as possible. This helps out IDEs such that completions and other
@@ -443,6 +509,35 @@ pub(crate) fn main(args: TokenStream, item: TokenStream, rt_multi_thread: bool) 
     }
 }
 
+// Check whether given attribute is a test attribute of forms:
+// * `#[test]`
+// * `#[core::prelude::*::test]` or `#[::core::prelude::*::test]`
+// * `#[std::prelude::*::test]` or `#[::std::prelude::*::test]`
+fn is_test_attribute(attr: &Attribute) -> bool {
+    let path = match &attr.meta {
+        syn::Meta::Path(path) => path,
+        _ => return false,
+    };
+    let candidates = [
+        ["core", "prelude", "*", "test"],
+        ["std", "prelude", "*", "test"],
+    ];
+    if path.leading_colon.is_none()
+        && path.segments.len() == 1
+        && path.segments[0].arguments.is_none()
+        && path.segments[0].ident == "test"
+    {
+        return true;
+    } else if path.segments.len() != candidates[0].len() {
+        return false;
+    }
+    candidates.into_iter().any(|segments| {
+        path.segments.iter().zip(segments).all(|(segment, path)| {
+            segment.arguments.is_none() && (path == "*" || segment.ident == path)
+        })
+    })
+}
+
 pub(crate) fn test(args: TokenStream, item: TokenStream, rt_multi_thread: bool) -> TokenStream {
     // If any of the steps for this macro fail, we still want to expand to an item that is as close
     // to the expected output as possible. This helps out IDEs such that completions and other
@@ -451,8 +546,8 @@ pub(crate) fn test(args: TokenStream, item: TokenStream, rt_multi_thread: bool) 
         Ok(it) => it,
         Err(e) => return token_stream_with_error(item, e),
     };
-    let config = if let Some(attr) = input.attrs().find(|attr| attr.meta.path().is_ident("test")) {
-        let msg = "second test attribute is supplied";
+    let config = if let Some(attr) = input.attrs().find(|attr| is_test_attribute(attr)) {
+        let msg = "second test attribute is supplied, consider removing or changing the order of your test attributes";
         Err(syn::Error::new_spanned(attr, msg))
     } else {
         AttributeArgs::parse_terminated
@@ -493,13 +588,11 @@ impl ItemFn {
     /// Convert our local function item into a token stream.
     fn into_tokens(
         self,
-        header: proc_macro2::TokenStream,
+        generated_attrs: proc_macro2::TokenStream,
         body: proc_macro2::TokenStream,
         last_block: proc_macro2::TokenStream,
     ) -> TokenStream {
         let mut tokens = proc_macro2::TokenStream::new();
-        header.to_tokens(&mut tokens);
-
         // Outer attributes are simply streamed as-is.
         for attr in self.outer_attrs {
             attr.to_tokens(&mut tokens);
@@ -507,11 +600,14 @@ impl ItemFn {
 
         // Inner attributes require extra care, since they're not supported on
         // blocks (which is what we're expanded into) we instead lift them
-        // outside of the function. This matches the behaviour of `syn`.
+        // outside of the function. This matches the behavior of `syn`.
         for mut attr in self.inner_attrs {
             attr.style = syn::AttrStyle::Outer;
             attr.to_tokens(&mut tokens);
         }
+
+        // Add generated macros at the end, so macros processed later are aware of them.
+        generated_attrs.to_tokens(&mut tokens);
 
         self.vis.to_tokens(&mut tokens);
         self.sig.to_tokens(&mut tokens);
@@ -586,6 +682,6 @@ impl ToTokens for Body<'_> {
             for stmt in self.stmts {
                 stmt.to_tokens(tokens);
             }
-        })
+        });
     }
 }

@@ -1,12 +1,12 @@
 #![warn(rust_2018_idioms)]
 #![cfg(feature = "sync")]
 
-#[cfg(tokio_wasm_not_wasi)]
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-#[cfg(tokio_wasm_not_wasi)]
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
 use wasm_bindgen_test::wasm_bindgen_test as maybe_tokio_test;
 
-#[cfg(not(tokio_wasm_not_wasi))]
+#[cfg(not(all(target_family = "wasm", not(target_os = "wasi"))))]
 use tokio::test as maybe_tokio_test;
 
 use tokio::sync::Mutex;
@@ -165,14 +165,14 @@ fn try_lock() {
 async fn debug_format() {
     let s = "debug";
     let m = Mutex::new(s.to_string());
-    assert_eq!(format!("{:?}", s), format!("{:?}", m.lock().await));
+    assert_eq!(format!("{s:?}"), format!("{:?}", m.lock().await));
 }
 
 #[maybe_tokio_test]
 async fn mutex_debug() {
     let s = "data";
     let m = Mutex::new(s.to_string());
-    assert_eq!(format!("{:?}", m), r#"Mutex { data: "data" }"#);
+    assert_eq!(format!("{m:?}"), r#"Mutex { data: "data" }"#);
     let _guard = m.lock().await;
-    assert_eq!(format!("{:?}", m), r#"Mutex { data: <locked> }"#)
+    assert_eq!(format!("{m:?}"), r#"Mutex { data: <locked> }"#)
 }
