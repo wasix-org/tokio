@@ -17,3 +17,7 @@ members = [
 
 [workspace.metadata.spellcheck]
 config = "spellcheck.toml"
+
+
+[patch.crates-io]
+parking_lot = { git = "https://github.com/mvniekerk/parking_lot", branch = "master" }
