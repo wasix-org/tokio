@@ -790,36 +790,37 @@ impl fmt::Debug for TcpSocket {
 // These trait implementations can't be build on Windows, so we completely
 // ignore them, even when building documentation.
 #[cfg(any(unix, target_vendor = "wasmer"))]
-cfg_unix! {
-    impl AsRawFd for TcpSocket {
-        fn as_raw_fd(&self) -> RawFd {
-            self.inner.as_raw_fd()
-        }
+impl AsRawFd for TcpSocket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_raw_fd()
     }
+}
 
-    impl AsFd for TcpSocket {
-        fn as_fd(&self) -> BorrowedFd<'_> {
-            unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
-        }
+#[cfg(any(unix, target_vendor = "wasmer"))]
+impl AsFd for TcpSocket {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
+}
 
-    impl FromRawFd for TcpSocket {
-        /// Converts a `RawFd` to a `TcpSocket`.
-        ///
-        /// # Notes
-        ///
-        /// The caller is responsible for ensuring that the socket is in
-        /// non-blocking mode.
-        unsafe fn from_raw_fd(fd: RawFd) -> TcpSocket {
-            let inner = socket2::Socket::from_raw_fd(fd);
-            TcpSocket { inner }
-        }
+#[cfg(any(unix, target_vendor = "wasmer"))]
+impl FromRawFd for TcpSocket {
+    /// Converts a `RawFd` to a `TcpSocket`.
+    ///
+    /// # Notes
+    ///
+    /// The caller is responsible for ensuring that the socket is in
+    /// non-blocking mode.
+    unsafe fn from_raw_fd(fd: RawFd) -> TcpSocket {
+        let inner = socket2::Socket::from_raw_fd(fd);
+        TcpSocket { inner }
     }
+}
 
-    impl IntoRawFd for TcpSocket {
-        fn into_raw_fd(self) -> RawFd {
-            self.inner.into_raw_fd()
-        }
+#[cfg(any(unix, target_vendor = "wasmer"))]
+impl IntoRawFd for TcpSocket {
+    fn into_raw_fd(self) -> RawFd {
+        self.inner.into_raw_fd()
     }
 }
 
