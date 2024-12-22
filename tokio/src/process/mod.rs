@@ -777,7 +777,8 @@ impl Command {
     ///
     /// [signal handler]: crate::signal
     #[cfg(any(unix, target_vendor = "wasmer"))]
-    #[cfg_attr(docsrs, doc(cfg(unix)))]
+    #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(all(unix, tokio_unstable))))]
     pub fn process_group(&mut self, pgroup: i32) -> &mut Command {
         self.std.process_group(pgroup);
         self
