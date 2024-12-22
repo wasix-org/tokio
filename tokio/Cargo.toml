@@ -109,7 +109,7 @@ backtrace = { version = "0.3.58" }
 
 [target.'cfg(any(unix, target_vendor = "wasmer"))'.dependencies]
 libc = { git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.155", optional = true }
-signal-hook-registry = { git = "https://github.com/wasix-org/signal-hook.git", branch = "registry-v1.1.1", optional = true }
+signal-hook-registry = { git = "https://github.com/mvniekerk/signal-hook.git", branch = "registry-v1.1.1-libc-upgrade", optional = true }
 
 [target.'cfg(any(unix, target_vendor = "wasmer"))'.dev-dependencies]
 libc = { git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.155" }
