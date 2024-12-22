@@ -14,7 +14,7 @@ use crate::loom::cell::UnsafeCell;
 use crate::runtime::context;
 use crate::runtime::task::raw::{self, Vtable};
 use crate::runtime::task::state::State;
-use crate::runtime::task::{Id, Schedule};
+use crate::runtime::task::{Id, Schedule, TaskHarnessScheduleHooks};
 use crate::util::linked_list;
 
 use std::num::NonZeroU64;
@@ -28,7 +28,7 @@ use std::task::{Context, Poll, Waker};
 /// be referenced by both *mut Cell and *mut Header.
 ///
 /// Any changes to the layout of this struct _must_ also be reflected in the
-/// const fns in raw.rs.
+/// `const` fns in raw.rs.
 ///
 // # This struct should be cache padded to avoid false sharing. The cache padding rules are copied
 // from crossbeam-utils/src/cache_padded.rs
@@ -132,7 +132,7 @@ pub(super) struct CoreStage<T: Future> {
 /// Holds the future or output, depending on the stage of execution.
 ///
 /// Any changes to the layout of this struct _must_ also be reflected in the
-/// const fns in raw.rs.
+/// `const` fns in raw.rs.
 #[repr(C)]
 pub(super) struct Core<T: Future, S> {
     /// Scheduler used to drive this future.
@@ -157,10 +157,10 @@ pub(crate) struct Header {
     /// Table of function pointers for executing actions on the task.
     pub(super) vtable: &'static Vtable,
 
-    /// This integer contains the id of the OwnedTasks or LocalOwnedTasks that
-    /// this task is stored in. If the task is not in any list, should be the
-    /// id of the list that it was previously in, or `None` if it has never been
-    /// in any list.
+    /// This integer contains the id of the `OwnedTasks` or `LocalOwnedTasks`
+    /// that this task is stored in. If the task is not in any list, should be
+    /// the id of the list that it was previously in, or `None` if it has never
+    /// been in any list.
     ///
     /// Once a task has been bound to a list, it can never be bound to another
     /// list, even if removed from the first list.
@@ -185,6 +185,8 @@ pub(super) struct Trailer {
     pub(super) owned: linked_list::Pointers<Header>,
     /// Consumer task waiting on completion of this task.
     pub(super) waker: UnsafeCell<Option<Waker>>,
+    /// Optional hooks needed in the harness.
+    pub(super) hooks: TaskHarnessScheduleHooks,
 }
 
 generate_addr_of_methods! {
@@ -196,6 +198,7 @@ generate_addr_of_methods! {
 }
 
 /// Either the future or the output.
+#[repr(C)] // https://github.com/rust-lang/miri/issues/3780
 pub(super) enum Stage<T: Future> {
     Running(T),
     Finished(super::Result<T::Output>),
@@ -226,6 +229,7 @@ impl<T: Future, S: Schedule> Cell<T, S> {
         let tracing_id = future.id();
         let vtable = raw::vtable::<T, S>();
         let result = Box::new(Cell {
+            trailer: Trailer::new(scheduler.hooks()),
             header: new_header(
                 state,
                 vtable,
@@ -239,7 +243,6 @@ impl<T: Future, S: Schedule> Cell<T, S> {
                 },
                 task_id,
             },
-            trailer: Trailer::new(),
         });
 
         #[cfg(debug_assertions)]
@@ -459,10 +462,11 @@ impl Header {
 }
 
 impl Trailer {
-    fn new() -> Self {
+    fn new(hooks: TaskHarnessScheduleHooks) -> Self {
         Trailer {
             waker: UnsafeCell::new(None),
             owned: linked_list::Pointers::new(),
+            hooks,
         }
     }
 
@@ -488,7 +492,5 @@ impl Trailer {
 #[test]
 #[cfg(not(loom))]
 fn header_lte_cache_line() {
-    use std::mem::size_of;
-
-    assert!(size_of::<Header>() <= 8 * size_of::<*const ()>());
+    assert!(std::mem::size_of::<Header>() <= 8 * std::mem::size_of::<*const ()>());
 }

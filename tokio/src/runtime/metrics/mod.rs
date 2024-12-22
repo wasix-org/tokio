@@ -8,18 +8,18 @@
 //! [unstable]: crate#unstable-features
 #![allow(clippy::module_inception)]
 
-cfg_metrics! {
+mod runtime;
+pub use runtime::RuntimeMetrics;
+
+cfg_unstable_metrics! {
     mod batch;
     pub(crate) use batch::MetricsBatch;
 
     mod histogram;
     pub(crate) use histogram::{Histogram, HistogramBatch, HistogramBuilder};
     #[allow(unreachable_pub)] // rust-lang/rust#57411
-    pub use histogram::HistogramScale;
+    pub use histogram::{HistogramScale, HistogramConfiguration, LogHistogram, LogHistogramBuilder, InvalidHistogramConfiguration};
 
-    mod runtime;
-    #[allow(unreachable_pub)] // rust-lang/rust#57411
-    pub use runtime::RuntimeMetrics;
 
     mod scheduler;
     pub(crate) use scheduler::SchedulerMetrics;
@@ -33,7 +33,7 @@ cfg_metrics! {
     }
 }
 
-cfg_not_metrics! {
+cfg_not_unstable_metrics! {
     mod mock;
 
     pub(crate) use mock::{SchedulerMetrics, WorkerMetrics, MetricsBatch, HistogramBuilder};

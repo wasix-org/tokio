@@ -3,6 +3,7 @@ name = "benches"
 version = "0.0.0"
 publish = false
 edition = "2021"
+license = "MIT"
 
 [features]
 test-util = ["tokio/test-util"]
@@ -12,11 +13,10 @@ tokio = { version = "1.5.0", path = "../tokio", features = ["full"] }
 criterion = "0.5.1"
 rand = "0.8"
 rand_chacha = "0.3"
-num_cpus = "1.16.0"
 
 [dev-dependencies]
 tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
-tokio-stream = { path = "../tokio-stream" }
+tokio-stream = { version = "0.1", path = "../tokio-stream" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.42"
@@ -24,6 +24,11 @@ libc = "0.2.42"
 [[bench]]
 name = "spawn"
 path = "spawn.rs"
+harness = false
+
+[[bench]]
+name = "sync_broadcast"
+path = "sync_broadcast.rs"
 harness = false
 
 [[bench]]
@@ -84,4 +89,9 @@ harness = false
 [[bench]]
 name = "time_now"
 path = "time_now.rs"
+harness = false
+
+[[bench]]
+name = "time_timeout"
+path = "time_timeout.rs"
 harness = false

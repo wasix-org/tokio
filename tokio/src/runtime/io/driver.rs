@@ -156,7 +156,7 @@ impl Driver {
                 // In case of wasm32_wasi this error happens, when trying to poll without subscriptions
                 // just return from the park, as there would be nothing, which wakes us up.
             }
-            Err(e) => panic!("unexpected error when polling the I/O driver: {:?}", e),
+            Err(e) => panic!("unexpected error when polling the I/O driver: {e:?}"),
         }
 
         // Process all the events that came in, dispatching appropriately
@@ -170,8 +170,7 @@ impl Driver {
                 self.signal_ready = true;
             } else {
                 let ready = Ready::from_mio(event);
-                // Use std::ptr::from_exposed_addr when stable
-                let ptr: *const ScheduledIo = token.0 as *const _;
+                let ptr = super::EXPOSE_IO.from_exposed_addr(token.0);
 
                 // Safety: we ensure that the pointers used as tokens are not freed
                 // until they are both deregistered from mio **and** we know the I/O
@@ -222,8 +221,17 @@ impl Handle {
         let scheduled_io = self.registrations.allocate(&mut self.synced.lock())?;
         let token = scheduled_io.token();
 
-        // TODO: if this returns an err, the `ScheduledIo` leaks...
-        self.registry.register(source, token, interest.to_mio())?;
+        // we should remove the `scheduled_io` from the `registrations` set if registering
+        // the `source` with the OS fails. Otherwise it will leak the `scheduled_io`.
+        if let Err(e) = self.registry.register(source, token, interest.to_mio()) {
+            // safety: `scheduled_io` is part of the `registrations` set.
+            unsafe {
+                self.registrations
+                    .remove(&mut self.synced.lock(), &scheduled_io)
+            };
+
+            return Err(e);
+        }
 
         // TODO: move this logic to `RegistrationSet` and use a `CountedLinkedList`
         self.metrics.incr_fd_count();

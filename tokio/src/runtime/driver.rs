@@ -42,6 +42,7 @@ pub(crate) struct Cfg {
     pub(crate) enable_pause_time: bool,
     pub(crate) start_paused: bool,
     pub(crate) nevents: usize,
+    pub(crate) workers: usize,
 }
 
 impl Driver {
@@ -50,7 +51,8 @@ impl Driver {
 
         let clock = create_clock(cfg.enable_pause_time, cfg.start_paused);
 
-        let (time_driver, time_handle) = create_time_driver(cfg.enable_time, io_stack, &clock);
+        let (time_driver, time_handle) =
+            create_time_driver(cfg.enable_time, io_stack, &clock, cfg.workers);
 
         Ok((
             Self { inner: time_driver },
@@ -308,9 +310,10 @@ cfg_time! {
         enable: bool,
         io_stack: IoStack,
         clock: &Clock,
+        workers: usize,
     ) -> (TimeDriver, TimeHandle) {
         if enable {
-            let (driver, handle) = crate::runtime::time::Driver::new(io_stack, clock);
+            let (driver, handle) = crate::runtime::time::Driver::new(io_stack, clock, workers as u32);
 
             (TimeDriver::Enabled { driver }, Some(handle))
         } else {
@@ -363,6 +366,7 @@ cfg_not_time! {
         _enable: bool,
         io_stack: IoStack,
         _clock: &Clock,
+        _workers: usize,
     ) -> (TimeDriver, TimeHandle) {
         (io_stack, ())
     }

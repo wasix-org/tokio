@@ -63,7 +63,7 @@ cfg_net! {
     ///     // previous one.
     ///     //
     ///     // On Windows, this allows rebinding sockets which are actively in use,
-    ///     // which allows “socket hijacking”, so we explicitly don't set it here.
+    ///     // which allows "socket hijacking", so we explicitly don't set it here.
     ///     // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
     ///     socket.set_reuseaddr(true)?;
     ///     socket.bind(addr)?;
@@ -183,6 +183,16 @@ impl TcpSocket {
         )))]
         inner.set_nonblocking(true)?;
         Ok(TcpSocket { inner })
+    }
+
+    /// Sets value for the `SO_KEEPALIVE` option on this socket.
+    pub fn set_keepalive(&self, keepalive: bool) -> io::Result<()> {
+        self.inner.set_keepalive(keepalive)
+    }
+
+    /// Gets the value of the `SO_KEEPALIVE` option on this socket.
+    pub fn keepalive(&self) -> io::Result<bool> {
+        self.inner.keepalive()
     }
 
     /// Allows the socket to bind to an in-use address.
@@ -415,7 +425,7 @@ impl TcpSocket {
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
     /// let socket = TcpSocket::new_v4()?;
     ///
-    /// println!("{:?}", socket.nodelay()?);
+    /// socket.set_nodelay(true)?;
     /// # Ok(())
     /// # }
     /// ```
@@ -435,9 +445,9 @@ impl TcpSocket {
     /// use tokio::net::TcpSocket;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
-    /// let stream = TcpSocket::new_v4()?;
+    /// let socket = TcpSocket::new_v4()?;
     ///
-    /// stream.set_nodelay(true)?;
+    /// println!("{:?}", socket.nodelay()?);
     /// # Ok(())
     /// # }
     /// ```
@@ -777,38 +787,39 @@ impl fmt::Debug for TcpSocket {
     }
 }
 
+// These trait implementations can't be build on Windows, so we completely
+// ignore them, even when building documentation.
 #[cfg(any(unix, target_vendor = "wasmer"))]
-impl AsRawFd for TcpSocket {
-    fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
+cfg_unix! {
+    impl AsRawFd for TcpSocket {
+        fn as_raw_fd(&self) -> RawFd {
+            self.inner.as_raw_fd()
+        }
     }
-}
 
-#[cfg(any(unix, target_vendor = "wasmer"))]
-impl AsFd for TcpSocket {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
+    impl AsFd for TcpSocket {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
+        }
     }
-}
 
-#[cfg(any(unix, target_vendor = "wasmer"))]
-impl FromRawFd for TcpSocket {
-    /// Converts a `RawFd` to a `TcpSocket`.
-    ///
-    /// # Notes
-    ///
-    /// The caller is responsible for ensuring that the socket is in
-    /// non-blocking mode.
-    unsafe fn from_raw_fd(fd: RawFd) -> TcpSocket {
-        let inner = socket2::Socket::from_raw_fd(fd);
-        TcpSocket { inner }
+    impl FromRawFd for TcpSocket {
+        /// Converts a `RawFd` to a `TcpSocket`.
+        ///
+        /// # Notes
+        ///
+        /// The caller is responsible for ensuring that the socket is in
+        /// non-blocking mode.
+        unsafe fn from_raw_fd(fd: RawFd) -> TcpSocket {
+            let inner = socket2::Socket::from_raw_fd(fd);
+            TcpSocket { inner }
+        }
     }
-}
 
-#[cfg(any(unix, target_vendor = "wasmer"))]
-impl IntoRawFd for TcpSocket {
-    fn into_raw_fd(self) -> RawFd {
-        self.inner.into_raw_fd()
+    impl IntoRawFd for TcpSocket {
+        fn into_raw_fd(self) -> RawFd {
+            self.inner.into_raw_fd()
+        }
     }
 }
 

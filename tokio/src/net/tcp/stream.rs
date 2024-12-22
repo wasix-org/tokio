@@ -1,6 +1,6 @@
 cfg_not_wasi_classic! {
-    use crate::future::poll_fn;
     use crate::net::{to_socket_addrs, ToSocketAddrs};
+    use std::future::poll_fn;
     use std::time::Duration;
 }
 
@@ -12,7 +12,7 @@ use std::fmt;
 use std::io;
 use std::net::{Shutdown, SocketAddr};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -340,7 +340,7 @@ impl TcpStream {
     /// use tokio::io::{self, ReadBuf};
     /// use tokio::net::TcpStream;
     ///
-    /// use futures::future::poll_fn;
+    /// use std::future::poll_fn;
     ///
     /// #[tokio::main]
     /// async fn main() -> io::Result<()> {
@@ -1060,7 +1060,7 @@ impl TcpStream {
     /// returns the number of bytes peeked.
     ///
     /// Successive calls return the same data. This is accomplished by passing
-    /// `MSG_PEEK` as a flag to the underlying recv system call.
+    /// `MSG_PEEK` as a flag to the underlying `recv` system call.
     ///
     /// # Examples
     ///
@@ -1178,13 +1178,13 @@ impl TcpStream {
             socket2::SockRef::from(self).linger()
         }
 
-        /// Sets the linger duration of this socket by setting the SO_LINGER option.
+        /// Sets the linger duration of this socket by setting the `SO_LINGER` option.
         ///
         /// This option controls the action taken when a stream has unsent messages and the stream is
-        /// closed. If SO_LINGER is set, the system shall block the process until it can transmit the
+        /// closed. If `SO_LINGER` is set, the system shall block the process until it can transmit the
         /// data or until the time expires.
         ///
-        /// If SO_LINGER is not specified, and the stream is closed, the system handles the call in a
+        /// If `SO_LINGER` is not specified, and the stream is closed, the system handles the call in a
         /// way that allows the process to continue as quickly as possible.
         ///
         /// # Examples
@@ -1278,7 +1278,7 @@ impl TcpStream {
 
     // == Poll IO functions that takes `&self` ==
     //
-    // To read or write without mutable access to the `UnixStream`, combine the
+    // To read or write without mutable access to the `TcpStream`, combine the
     // `poll_read_ready` or `poll_write_ready` methods with the `try_read` or
     // `try_write` methods.
 

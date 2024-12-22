@@ -29,7 +29,7 @@ const WRITE_SERVICE_PERIOD: Duration = Duration::from_millis(20);
 // because another writer claimed the buffer space
 const PROBABILITY_FLUSH_WAIT: f64 = 0.1;
 
-/// A slow writer that aims to simulate HDD behaviour under heavy load.
+/// A slow writer that aims to simulate HDD behavior under heavy load.
 ///
 /// There is a limited buffer, which is fully drained on the next write after
 /// a time limit is reached. Flush waits for the time limit to be reached
@@ -64,7 +64,7 @@ impl SlowHddWriter {
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         // If we hit a service interval, the buffer can be cleared
         let res = self.service_intervals.poll_tick(cx).map(|_| Ok(()));
-        if let Poll::Ready(_) = res {
+        if res.is_ready() {
             self.buffer_used = 0;
         }
         res
@@ -123,7 +123,7 @@ impl AsyncWrite for SlowHddWriter {
         cx: &mut std::task::Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        let writeable = bufs.into_iter().fold(0, |acc, buf| acc + buf.len());
+        let writeable = bufs.iter().fold(0, |acc, buf| acc + buf.len());
         self.write_bytes(cx, writeable)
     }
 

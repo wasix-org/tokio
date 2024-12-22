@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![cfg(feature = "full")]
+#![cfg(not(miri))] // Too slow on miri.
 
 use rand::SeedableRng;
 use rand::{rngs::StdRng, Rng};
@@ -36,7 +37,7 @@ async fn pause_time_in_main_threads() {
     tokio::time::pause();
 }
 
-#[cfg(panic = "unwind")]
+#[cfg_attr(panic = "abort", ignore)]
 #[cfg(all(feature = "full", not(target_os = "wasi")))] // Wasi doesn't support threads
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn pause_time_in_spawn_threads() {

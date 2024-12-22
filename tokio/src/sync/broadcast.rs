@@ -117,8 +117,9 @@
 //! ```
 
 use crate::loom::cell::UnsafeCell;
-use crate::loom::sync::atomic::AtomicUsize;
+use crate::loom::sync::atomic::{AtomicBool, AtomicUsize};
 use crate::loom::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard};
+use crate::runtime::coop::cooperative;
 use crate::util::linked_list::{self, GuardedLinkedList, LinkedList};
 use crate::util::WakeList;
 
@@ -127,9 +128,8 @@ use std::future::Future;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::ptr::NonNull;
-use std::sync::atomic::Ordering::SeqCst;
-use std::task::{Context, Poll, Waker};
-use std::usize;
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
+use std::task::{ready, Context, Poll, Waker};
 
 /// Sending-half of the [`broadcast`] channel.
 ///
@@ -255,7 +255,7 @@ pub mod error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 RecvError::Closed => write!(f, "channel closed"),
-                RecvError::Lagged(amt) => write!(f, "channel lagged by {}", amt),
+                RecvError::Lagged(amt) => write!(f, "channel lagged by {amt}"),
             }
         }
     }
@@ -291,7 +291,7 @@ pub mod error {
             match self {
                 TryRecvError::Empty => write!(f, "channel empty"),
                 TryRecvError::Closed => write!(f, "channel closed"),
-                TryRecvError::Lagged(amt) => write!(f, "channel lagged by {}", amt),
+                TryRecvError::Lagged(amt) => write!(f, "channel lagged by {amt}"),
             }
         }
     }
@@ -354,7 +354,7 @@ struct Slot<T> {
 /// An entry in the wait queue.
 struct Waiter {
     /// True if queued.
-    queued: bool,
+    queued: AtomicBool,
 
     /// Task waiting on the broadcast channel.
     waker: Option<Waker>,
@@ -369,7 +369,7 @@ struct Waiter {
 impl Waiter {
     fn new() -> Self {
         Self {
-            queued: false,
+            queued: AtomicBool::new(false),
             waker: None,
             pointers: linked_list::Pointers::new(),
             _p: PhantomPinned,
@@ -600,7 +600,7 @@ impl<T> Sender<T> {
         tail.pos = tail.pos.wrapping_add(1);
 
         // Get the slot
-        let mut slot = self.shared.buffer[idx].write().unwrap();
+        let mut slot = self.shared.buffer[idx].write();
 
         // Track the position
         slot.pos = pos;
@@ -696,7 +696,7 @@ impl<T> Sender<T> {
         while low < high {
             let mid = low + (high - low) / 2;
             let idx = base_idx.wrapping_add(mid) & self.shared.mask;
-            if self.shared.buffer[idx].read().unwrap().rem.load(SeqCst) == 0 {
+            if self.shared.buffer[idx].read().rem.load(SeqCst) == 0 {
                 low = mid + 1;
             } else {
                 high = mid;
@@ -738,10 +738,10 @@ impl<T> Sender<T> {
         let tail = self.shared.tail.lock();
 
         let idx = (tail.pos.wrapping_sub(1) & self.shared.mask as u64) as usize;
-        self.shared.buffer[idx].read().unwrap().rem.load(SeqCst) == 0
+        self.shared.buffer[idx].read().rem.load(SeqCst) == 0
     }
 
-    /// Returns the number of active receivers
+    /// Returns the number of active receivers.
     ///
     /// An active receiver is a [`Receiver`] handle returned from [`channel`] or
     /// [`subscribe`]. These are the handles that will receive values sent on
@@ -897,15 +897,22 @@ impl<T> Shared<T> {
         'outer: loop {
             while wakers.can_push() {
                 match list.pop_back_locked(&mut tail) {
-                    Some(mut waiter) => {
-                        // Safety: `tail` lock is still held.
-                        let waiter = unsafe { waiter.as_mut() };
+                    Some(waiter) => {
+                        unsafe {
+                            // Safety: accessing `waker` is safe because
+                            // the tail lock is held.
+                            if let Some(waker) = (*waiter.as_ptr()).waker.take() {
+                                wakers.push(waker);
+                            }
 
-                        assert!(waiter.queued);
-                        waiter.queued = false;
-
-                        if let Some(waker) = waiter.waker.take() {
-                            wakers.push(waker);
+                            // Safety: `queued` is atomic.
+                            let queued = &(*waiter.as_ptr()).queued;
+                            // `Relaxed` suffices because the tail lock is held.
+                            assert!(queued.load(Relaxed));
+                            // `Release` is needed to synchronize with `Recv::drop`.
+                            // It is critical to set this variable **after** waker
+                            // is extracted, otherwise we may data race with `Recv::drop`.
+                            queued.store(false, Release);
                         }
                     }
                     None => {
@@ -1051,7 +1058,7 @@ impl<T> Receiver<T> {
         let idx = (self.next & self.shared.mask as u64) as usize;
 
         // The slot holding the next value to read
-        let mut slot = self.shared.buffer[idx].read().unwrap();
+        let mut slot = self.shared.buffer[idx].read();
 
         if slot.pos != self.next {
             // Release the `slot` lock before attempting to acquire the `tail`
@@ -1068,7 +1075,7 @@ impl<T> Receiver<T> {
             let mut tail = self.shared.tail.lock();
 
             // Acquire slot lock again
-            slot = self.shared.buffer[idx].read().unwrap();
+            slot = self.shared.buffer[idx].read();
 
             // Make sure the position did not change. This could happen in the
             // unlikely event that the buffer is wrapped between dropping the
@@ -1104,8 +1111,13 @@ impl<T> Receiver<T> {
                                     }
                                 }
 
-                                if !(*ptr).queued {
-                                    (*ptr).queued = true;
+                                // If the waiter is not already queued, enqueue it.
+                                // `Relaxed` order suffices: we have synchronized with
+                                // all writers through the tail lock that we hold.
+                                if !(*ptr).queued.load(Relaxed) {
+                                    // `Relaxed` order suffices: all the readers will
+                                    // synchronize with this write through the tail lock.
+                                    (*ptr).queued.store(true, Relaxed);
                                     tail.waiters.push_front(NonNull::new_unchecked(&mut *ptr));
                                 }
                             });
@@ -1251,8 +1263,7 @@ impl<T: Clone> Receiver<T> {
     /// }
     /// ```
     pub async fn recv(&mut self) -> Result<T, RecvError> {
-        let fut = Recv::new(self);
-        fut.await
+        cooperative(Recv::new(self)).await
     }
 
     /// Attempts to return a pending value on this receiver without awaiting.
@@ -1357,7 +1368,7 @@ impl<'a, T> Recv<'a, T> {
         Recv {
             receiver,
             waiter: UnsafeCell::new(Waiter {
-                queued: false,
+                queued: AtomicBool::new(false),
                 waker: None,
                 pointers: linked_list::Pointers::new(),
                 _p: PhantomPinned,
@@ -1402,22 +1413,37 @@ where
 
 impl<'a, T> Drop for Recv<'a, T> {
     fn drop(&mut self) {
-        // Acquire the tail lock. This is required for safety before accessing
-        // the waiter node.
-        let mut tail = self.receiver.shared.tail.lock();
+        // Safety: `waiter.queued` is atomic.
+        // Acquire ordering is required to synchronize with
+        // `Shared::notify_rx` before we drop the object.
+        let queued = self
+            .waiter
+            .with(|ptr| unsafe { (*ptr).queued.load(Acquire) });
 
-        // safety: tail lock is held
-        let queued = self.waiter.with(|ptr| unsafe { (*ptr).queued });
-
+        // If the waiter is queued, we need to unlink it from the waiters list.
+        // If not, no further synchronization is required, since the waiter
+        // is not in the list and, as such, is not shared with any other threads.
         if queued {
-            // Remove the node
-            //
-            // safety: tail lock is held and the wait node is verified to be in
-            // the list.
-            unsafe {
-                self.waiter.with_mut(|ptr| {
-                    tail.waiters.remove((&mut *ptr).into());
-                });
+            // Acquire the tail lock. This is required for safety before accessing
+            // the waiter node.
+            let mut tail = self.receiver.shared.tail.lock();
+
+            // Safety: tail lock is held.
+            // `Relaxed` order suffices because we hold the tail lock.
+            let queued = self
+                .waiter
+                .with_mut(|ptr| unsafe { (*ptr).queued.load(Relaxed) });
+
+            if queued {
+                // Remove the node
+                //
+                // safety: tail lock is held and the wait node is verified to be in
+                // the list.
+                unsafe {
+                    self.waiter.with_mut(|ptr| {
+                        tail.waiters.remove((&mut *ptr).into());
+                    });
+                }
             }
         }
     }

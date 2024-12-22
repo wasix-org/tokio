@@ -52,6 +52,7 @@ macro_rules! assert_closed {
     };
 }
 
+#[allow(unused)]
 trait AssertSend: Send + Sync {}
 impl AssertSend for broadcast::Sender<i32> {}
 impl AssertSend for broadcast::Receiver<i32> {}
@@ -285,8 +286,6 @@ fn zero_capacity() {
 #[should_panic]
 #[cfg(not(target_family = "wasm"))] // wasm currently doesn't support unwinding
 fn capacity_too_big() {
-    use std::usize;
-
     broadcast::channel::<()>(1 + (usize::MAX >> 1));
 }
 
@@ -640,4 +639,20 @@ fn send_in_waker_drop() {
 
     // Shouldn't deadlock.
     let _ = tx.send(());
+}
+
+#[tokio::test]
+async fn receiver_recv_is_cooperative() {
+    let (tx, mut rx) = broadcast::channel(8);
+
+    tokio::select! {
+        biased;
+        _ = async {
+            loop {
+                assert!(tx.send(()).is_ok());
+                assert!(rx.recv().await.is_ok());
+            }
+        } => {},
+        _ = tokio::task::yield_now() => {},
+    }
 }

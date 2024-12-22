@@ -1,4 +1,3 @@
-use crate::future::poll_fn;
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
 use crate::net::unix::split::{split, ReadHalf, WriteHalf};
 use crate::net::unix::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
@@ -6,10 +5,17 @@ use crate::net::unix::ucred::{self, UCred};
 use crate::net::unix::SocketAddr;
 
 use std::fmt;
+use std::future::poll_fn;
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
+#[cfg(target_os = "android")]
+use std::os::android::net::SocketAddrExt;
+#[cfg(target_os = "linux")]
+use std::os::linux::net::SocketAddrExt;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
-use std::os::unix::net;
+use std::os::unix::net::{self, SocketAddr as StdSocketAddr};
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -39,6 +45,24 @@ cfg_net_unix! {
 }
 
 impl UnixStream {
+    pub(crate) async fn connect_mio(sys: mio::net::UnixStream) -> io::Result<UnixStream> {
+        let stream = UnixStream::new(sys)?;
+
+        // Once we've connected, wait for the stream to be writable as
+        // that's when the actual connection has been initiated. Once we're
+        // writable we check for `take_socket_error` to see if the connect
+        // actually hit an error or not.
+        //
+        // If all that succeeded then we ship everything on up.
+        poll_fn(|cx| stream.io.registration().poll_write_ready(cx)).await?;
+
+        if let Some(e) = stream.io.take_error()? {
+            return Err(e);
+        }
+
+        Ok(stream)
+    }
+
     /// Connects to the socket named by `path`.
     ///
     /// This function will create a new Unix socket and connect to the path
@@ -48,7 +72,20 @@ impl UnixStream {
     where
         P: AsRef<Path>,
     {
-        let stream = mio::net::UnixStream::connect(path)?;
+        // On linux, abstract socket paths need to be considered.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        let addr = {
+            let os_str_bytes = path.as_ref().as_os_str().as_bytes();
+            if os_str_bytes.starts_with(b"\0") {
+                StdSocketAddr::from_abstract_name(&os_str_bytes[1..])?
+            } else {
+                StdSocketAddr::from_pathname(path)?
+            }
+        };
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let addr = StdSocketAddr::from_pathname(path)?;
+
+        let stream = mio::net::UnixStream::connect_addr(&addr)?;
         let stream = UnixStream::new(stream)?;
 
         poll_fn(|cx| stream.io.registration().poll_write_ready(cx)).await?;
@@ -744,7 +781,7 @@ impl UnixStream {
 
     /// Creates new [`UnixStream`] from a [`std::os::unix::net::UnixStream`].
     ///
-    /// This function is intended to be used to wrap a UnixStream from the
+    /// This function is intended to be used to wrap a `UnixStream` from the
     /// standard library in the Tokio equivalent.
     ///
     /// # Notes

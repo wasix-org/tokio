@@ -84,8 +84,8 @@ impl<S: 'static> OwnedTasks<S> {
         }
     }
 
-    /// Binds the provided task to this OwnedTasks instance. This fails if the
-    /// OwnedTasks has been closed.
+    /// Binds the provided task to this `OwnedTasks` instance. This fails if the
+    /// `OwnedTasks` has been closed.
     pub(crate) fn bind<T>(
         &self,
         task: T,
@@ -96,6 +96,26 @@ impl<S: 'static> OwnedTasks<S> {
         S: Schedule,
         T: Future + Send + 'static,
         T::Output: Send + 'static,
+    {
+        let (task, notified, join) = super::new_task(task, scheduler, id);
+        let notified = unsafe { self.bind_inner(task, notified) };
+        (join, notified)
+    }
+
+    /// Bind a task that isn't safe to transfer across thread boundaries.
+    ///
+    /// # Safety
+    /// Only use this in `LocalRuntime` where the task cannot move
+    pub(crate) unsafe fn bind_local<T>(
+        &self,
+        task: T,
+        scheduler: S,
+        id: super::Id,
+    ) -> (JoinHandle<T::Output>, Option<Notified<S>>)
+    where
+        S: Schedule,
+        T: Future + 'static,
+        T::Output: 'static,
     {
         let (task, notified, join) = super::new_task(task, scheduler, id);
         let notified = unsafe { self.bind_inner(task, notified) };
@@ -125,8 +145,8 @@ impl<S: 'static> OwnedTasks<S> {
         Some(notified)
     }
 
-    /// Asserts that the given task is owned by this OwnedTasks and convert it to
-    /// a LocalNotified, giving the thread permission to poll this task.
+    /// Asserts that the given task is owned by this `OwnedTasks` and convert it to
+    /// a `LocalNotified`, giving the thread permission to poll this task.
     #[inline]
     pub(crate) fn assert_owner(&self, task: Notified<S>) -> LocalNotified<S> {
         debug_assert_eq!(task.header().get_owner_id(), Some(self.id));
@@ -166,8 +186,14 @@ impl<S: 'static> OwnedTasks<S> {
         self.list.shard_size()
     }
 
-    pub(crate) fn active_tasks_count(&self) -> usize {
+    pub(crate) fn num_alive_tasks(&self) -> usize {
         self.list.len()
+    }
+
+    cfg_64bit_metrics! {
+        pub(crate) fn spawned_tasks_count(&self) -> u64 {
+            self.list.added()
+        }
     }
 
     pub(crate) fn remove(&self, task: &Task<S>) -> Option<Task<S>> {
@@ -284,8 +310,8 @@ impl<S: 'static> LocalOwnedTasks<S> {
             unsafe { inner.list.remove(task.header_ptr()) })
     }
 
-    /// Asserts that the given task is owned by this LocalOwnedTasks and convert
-    /// it to a LocalNotified, giving the thread permission to poll this task.
+    /// Asserts that the given task is owned by this `LocalOwnedTasks` and convert
+    /// it to a `LocalNotified`, giving the thread permission to poll this task.
     #[inline]
     pub(crate) fn assert_owner(&self, task: Notified<S>) -> LocalNotified<S> {
         assert_eq!(task.header().get_owner_id(), Some(self.id));

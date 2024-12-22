@@ -9,19 +9,19 @@
 //! Shutting down the runtime involves the following steps:
 //!
 //!  1. The Shared::close method is called. This closes the inject queue and
-//!     OwnedTasks instance and wakes up all worker threads.
+//!     `OwnedTasks` instance and wakes up all worker threads.
 //!
 //!  2. Each worker thread observes the close signal next time it runs
 //!     Core::maintenance by checking whether the inject queue is closed.
-//!     The Core::is_shutdown flag is set to true.
+//!     The `Core::is_shutdown` flag is set to true.
 //!
 //!  3. The worker thread calls `pre_shutdown` in parallel. Here, the worker
-//!     will keep removing tasks from OwnedTasks until it is empty. No new
-//!     tasks can be pushed to the OwnedTasks during or after this step as it
+//!     will keep removing tasks from `OwnedTasks` until it is empty. No new
+//!     tasks can be pushed to the `OwnedTasks` during or after this step as it
 //!     was closed in step 1.
 //!
 //!  5. The workers call Shared::shutdown to enter the single-threaded phase of
-//!     shutdown. These calls will push their core to Shared::shutdown_cores,
+//!     shutdown. These calls will push their core to `Shared::shutdown_cores`,
 //!     and the last thread to push its core will finish the shutdown procedure.
 //!
 //!  6. The local run queue of each core is emptied, then the inject queue is
@@ -35,22 +35,22 @@
 //!
 //! When spawning tasks during shutdown, there are two cases:
 //!
-//!  * The spawner observes the OwnedTasks being open, and the inject queue is
+//!  * The spawner observes the `OwnedTasks` being open, and the inject queue is
 //!    closed.
-//!  * The spawner observes the OwnedTasks being closed and doesn't check the
+//!  * The spawner observes the `OwnedTasks` being closed and doesn't check the
 //!    inject queue.
 //!
-//! The first case can only happen if the OwnedTasks::bind call happens before
+//! The first case can only happen if the `OwnedTasks::bind` call happens before
 //! or during step 1 of shutdown. In this case, the runtime will clean up the
 //! task in step 3 of shutdown.
 //!
 //! In the latter case, the task was not spawned and the task is immediately
 //! cancelled by the spawner.
 //!
-//! The correctness of shutdown requires both the inject queue and OwnedTasks
+//! The correctness of shutdown requires both the inject queue and `OwnedTasks`
 //! collection to have a closed bit. With a close bit on only the inject queue,
 //! spawning could run in to a situation where a task is successfully bound long
-//! after the runtime has shut down. With a close bit on only the OwnedTasks,
+//! after the runtime has shut down. With a close bit on only the `OwnedTasks`,
 //! the first spawning situation could result in the notification being pushed
 //! to the inject queue after step 6 of shutdown, which would leave a task in
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
@@ -58,23 +58,23 @@
 
 use crate::loom::sync::{Arc, Condvar, Mutex, MutexGuard};
 use crate::runtime;
-use crate::runtime::context;
 use crate::runtime::driver::Driver;
 use crate::runtime::scheduler::multi_thread_alt::{
     idle, queue, stats, Counters, Handle, Idle, Overflow, Stats, TraceStatus,
 };
 use crate::runtime::scheduler::{self, inject, Lock};
-use crate::runtime::task::OwnedTasks;
+use crate::runtime::task::{OwnedTasks, TaskHarnessScheduleHooks};
 use crate::runtime::{blocking, coop, driver, task, Config, SchedulerMetrics, WorkerMetrics};
+use crate::runtime::{context, TaskHooks};
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::rand::{FastRand, RngSeedGenerator};
 
 use std::cell::{Cell, RefCell};
-use std::cmp;
 use std::task::Waker;
 use std::time::Duration;
+use std::{cmp, thread};
 
-cfg_metrics! {
+cfg_unstable_metrics! {
     mod metrics;
 }
 
@@ -157,7 +157,7 @@ pub(crate) struct Shared {
     driver: AtomicCell<Driver>,
 
     /// Condition variables used to unblock worker threads. Each worker thread
-    /// has its own condvar it waits on.
+    /// has its own `condvar` it waits on.
     pub(super) condvars: Vec<Condvar>,
 
     /// The number of cores that have observed the trace signal.
@@ -174,7 +174,7 @@ pub(crate) struct Shared {
     /// Only held to trigger some code on drop. This is used to get internal
     /// runtime metrics that can be useful when doing performance
     /// investigations. This does nothing (empty struct, no drop impl) unless
-    /// the `tokio_internal_mt_counters` cfg flag is set.
+    /// the `tokio_internal_mt_counters` `cfg` flag is set.
     _counters: Counters,
 }
 
@@ -248,7 +248,7 @@ type Task = task::Task<Arc<Handle>>;
 type Notified = task::Notified<Arc<Handle>>;
 
 /// Value picked out of thin-air. Running the LIFO slot a handful of times
-/// seemms sufficient to benefit from locality. More than 3 times probably is
+/// seems sufficient to benefit from locality. More than 3 times probably is
 /// overweighing. The value can be tuned in the future with data that shows
 /// improvements.
 const MAX_LIFO_POLLS_PER_TICK: usize = 3;
@@ -303,6 +303,10 @@ pub(super) fn create(
     let (inject, inject_synced) = inject::Shared::new();
 
     let handle = Arc::new(Handle {
+        task_hooks: TaskHooks {
+            task_spawn_callback: config.before_spawn.clone(),
+            task_terminate_callback: config.after_termination.clone(),
+        },
         shared: Shared {
             remotes: remotes.into_boxed_slice(),
             inject,
@@ -569,6 +573,7 @@ impl Worker {
             }
         };
 
+        cx.shared().worker_metrics[core.index].set_thread_id(thread::current().id());
         core.stats.start_processing_scheduled_tasks(&mut self.stats);
 
         if let Some(task) = maybe_task {
@@ -658,13 +663,15 @@ impl Worker {
         let n = cmp::max(core.run_queue.remaining_slots() / 2, 1);
         let maybe_task = self.next_remote_task_batch_synced(cx, &mut synced, &mut core, n);
 
+        core.stats.unparked();
+        self.flush_metrics(cx, &mut core);
+
         Ok((maybe_task, core))
     }
 
     /// Ensure core's state is set correctly for the worker to start using.
     fn reset_acquired_core(&mut self, cx: &Context, synced: &mut Synced, core: &mut Core) {
         self.global_queue_interval = core.stats.tuned_global_queue_interval(&cx.shared().config);
-        debug_assert!(self.global_queue_interval > 1);
 
         // Reset `lifo_enabled` here in case the core was previously stolen from
         // a task that had the LIFO slot disabled.
@@ -1288,10 +1295,8 @@ impl Worker {
     fn tune_global_queue_interval(&mut self, cx: &Context, core: &mut Core) {
         let next = core.stats.tuned_global_queue_interval(&cx.shared().config);
 
-        debug_assert!(next > 1);
-
         // Smooth out jitter
-        if abs_diff(self.global_queue_interval, next) > 2 {
+        if u32::abs_diff(self.global_queue_interval, next) > 2 {
             self.global_queue_interval = next;
         }
     }
@@ -1313,6 +1318,11 @@ impl Context {
 
     fn shared(&self) -> &Shared {
         &self.handle.shared
+    }
+
+    #[cfg_attr(not(feature = "time"), allow(dead_code))]
+    pub(crate) fn get_worker_index(&self) -> usize {
+        self.index
     }
 }
 
@@ -1550,6 +1560,12 @@ impl task::Schedule for Arc<Handle> {
         self.shared.schedule_task(task, false);
     }
 
+    fn hooks(&self) -> TaskHarnessScheduleHooks {
+        TaskHarnessScheduleHooks {
+            task_terminate_callback: self.task_hooks.task_terminate_callback.clone(),
+        }
+    }
+
     fn yield_now(&self, task: Notified) {
         self.shared.schedule_task(task, true);
     }
@@ -1585,13 +1601,4 @@ fn with_current<R>(f: impl FnOnce(Option<&Context>) -> R) -> R {
         Some(MultiThreadAlt(ctx)) => f(Some(ctx)),
         _ => f(None),
     })
-}
-
-// `u32::abs_diff` is not available on Tokio's MSRV.
-fn abs_diff(a: u32, b: u32) -> u32 {
-    if a > b {
-        a - b
-    } else {
-        b - a
-    }
 }

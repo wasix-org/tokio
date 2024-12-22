@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![cfg(feature = "macros")]
 #![allow(clippy::disallowed_names)]
 
@@ -10,13 +11,32 @@ use tokio::test as maybe_tokio_test;
 use tokio::sync::oneshot;
 use tokio_test::{assert_ok, assert_pending, assert_ready};
 
-use futures::future::poll_fn;
+use std::future::poll_fn;
 use std::task::Poll::Ready;
 
 #[maybe_tokio_test]
 async fn sync_one_lit_expr_comma() {
     let foo = tokio::select! {
         foo = async { 1 } => foo,
+    };
+
+    assert_eq!(foo, 1);
+}
+
+#[maybe_tokio_test]
+async fn no_branch_else_only() {
+    let foo = tokio::select! {
+        else => 1,
+    };
+
+    assert_eq!(foo, 1);
+}
+
+#[maybe_tokio_test]
+async fn no_branch_else_only_biased() {
+    let foo = tokio::select! {
+        biased;
+        else => 1,
     };
 
     assert_eq!(foo, 1);
@@ -670,5 +690,30 @@ mod unstable {
             x = async { 8 } => x,
             x = async { 9 } => x,
         )
+    }
+}
+
+#[tokio::test]
+async fn select_into_future() {
+    struct NotAFuture;
+    impl std::future::IntoFuture for NotAFuture {
+        type Output = ();
+        type IntoFuture = std::future::Ready<()>;
+
+        fn into_future(self) -> Self::IntoFuture {
+            std::future::ready(())
+        }
+    }
+
+    tokio::select! {
+        () = NotAFuture => {},
+    }
+}
+
+// regression test for https://github.com/tokio-rs/tokio/issues/6721
+#[tokio::test]
+async fn temporary_lifetime_extension() {
+    tokio::select! {
+        () = &mut std::future::ready(()) => {},
     }
 }

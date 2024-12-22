@@ -36,8 +36,8 @@ pub(crate) struct Steal<T: 'static>(Arc<Inner<T>>);
 pub(crate) struct Inner<T: 'static> {
     /// Concurrently updated by many threads.
     ///
-    /// Contains two `UnsignedShort` values. The LSB byte is the "real" head of
-    /// the queue. The `UnsignedShort` in the MSB is set by a stealer in process
+    /// Contains two `UnsignedShort` values. The `LSB` byte is the "real" head of
+    /// the queue. The `UnsignedShort` in the `MSB` is set by a stealer in process
     /// of stealing values. It represents the first value being stolen in the
     /// batch. The `UnsignedShort` indices are intentionally wider than strictly
     /// required for buffer indexing in order to provide ABA mitigation and make
@@ -264,9 +264,7 @@ impl<T> Local<T> {
         assert_eq!(
             tail.wrapping_sub(head) as usize,
             LOCAL_QUEUE_CAPACITY,
-            "queue is not full; tail = {}; head = {}",
-            tail,
-            head
+            "queue is not full; tail = {tail}; head = {head}"
         );
 
         let prev = pack(head, head);
@@ -490,8 +488,7 @@ impl<T> Steal<T> {
 
         assert!(
             n <= LOCAL_QUEUE_CAPACITY as UnsignedShort / 2,
-            "actual = {}",
-            n
+            "actual = {n}"
         );
 
         let (first, _) = unpack(next_packed);
@@ -546,7 +543,7 @@ impl<T> Steal<T> {
     }
 }
 
-cfg_metrics! {
+cfg_unstable_metrics! {
     impl<T> Steal<T> {
         pub(crate) fn len(&self) -> usize {
             self.0.len() as _

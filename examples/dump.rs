@@ -1,3 +1,5 @@
+#![allow(unknown_lints, unexpected_cfgs)]
+
 //! This example demonstrates tokio's experimental task dumping functionality.
 //! This application deadlocks. Input CTRL+C to display traces of each task, or
 //! input CTRL+C twice within 1 second to quit.
@@ -47,9 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // capture a dump, and print each trace
             println!("{:-<80}", "");
             if let Ok(dump) = timeout(Duration::from_secs(2), handle.dump()).await {
-                for (i, task) in dump.tasks().iter().enumerate() {
+                for task in dump.tasks().iter() {
+                    let id = task.id();
                     let trace = task.trace();
-                    println!("TASK {i}:");
+                    println!("TASK {id}:");
                     println!("{trace}\n");
                 }
             } else {

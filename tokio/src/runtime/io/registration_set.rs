@@ -102,12 +102,24 @@ impl RegistrationSet {
     }
 
     pub(super) fn release(&self, synced: &mut Synced) {
-        for io in synced.pending_release.drain(..) {
+        let pending = std::mem::take(&mut synced.pending_release);
+
+        for io in pending {
             // safety: the registration is part of our list
-            let _ = unsafe { synced.registrations.remove(io.as_ref().into()) };
+            unsafe { self.remove(synced, &io) }
         }
 
         self.num_pending_release.store(0, Release);
+    }
+
+    // This function is marked as unsafe, because the caller must make sure that
+    // `io` is part of the registration set.
+    pub(super) unsafe fn remove(&self, synced: &mut Synced, io: &Arc<ScheduledIo>) {
+        // SAFETY: Pointers into an Arc are never null.
+        let io = unsafe { NonNull::new_unchecked(Arc::as_ptr(io).cast_mut()) };
+
+        super::EXPOSE_IO.unexpose_provenance(io.as_ptr());
+        let _ = synced.registrations.remove(io);
     }
 }
 

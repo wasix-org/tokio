@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![cfg(not(target_os = "wasi"))] // Wasi doesn't support UDP
+#![cfg(not(miri))] // No `socket` in Miri.
 
 use tokio::net::UdpSocket;
 use tokio_stream::StreamExt;
@@ -18,7 +19,8 @@ use std::sync::Arc;
         target_os = "macos",
         target_os = "ios",
         target_os = "tvos",
-        target_os = "watchos"
+        target_os = "watchos",
+        target_os = "visionos"
     ),
     allow(unused_assignments)
 )]
@@ -53,7 +55,8 @@ async fn send_framed_byte_codec() -> std::io::Result<()> {
         target_os = "macos",
         target_os = "ios",
         target_os = "tvos",
-        target_os = "watchos"
+        target_os = "watchos",
+        target_os = "visionos"
     )))]
     // test sending & receiving an empty message
     {

@@ -121,12 +121,12 @@ impl Driver {
         #[cfg(not(target_os = "wasi"))]
         {
             let mut buf = [0; 128];
-            loop {
+            #[allow(clippy::unused_io_amount)]loop {
                 match self.receiver.read(&mut buf) {
                     Ok(0) => panic!("EOF on self-pipe"),
                     Ok(_) => continue, // Keep reading
                     Err(e) if e.kind() == std_io::ErrorKind::WouldBlock => break,
-                    Err(e) => panic!("Bad read on self-pipe: {}", e),
+                    Err(e) => panic!("Bad read on self-pipe: {e}"),
                 }
             }
         }

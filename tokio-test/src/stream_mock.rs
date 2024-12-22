@@ -8,7 +8,7 @@
 //! intervals between items.
 //!
 //! # Usage
-//! To use the `StreamMock`, you need to create a builder using[`StreamMockBuilder`]. The builder
+//! To use the `StreamMock`, you need to create a builder using [`StreamMockBuilder`]. The builder
 //! allows you to enqueue actions such as returning items or waiting for a certain duration.
 //!
 //! # Example
@@ -36,10 +36,10 @@
 
 use std::collections::VecDeque;
 use std::pin::Pin;
-use std::task::Poll;
+use std::task::{ready, Poll};
 use std::time::Duration;
 
-use futures_core::{ready, Stream};
+use futures_core::Stream;
 use std::future::Future;
 use tokio::time::{sleep_until, Instant, Sleep};
 
@@ -161,8 +161,7 @@ impl<T: Unpin> Drop for StreamMock<T> {
 
         assert!(
             undropped_count == 0,
-            "StreamMock was dropped before all actions were consumed, {} actions were not consumed",
-            undropped_count
+            "StreamMock was dropped before all actions were consumed, {undropped_count} actions were not consumed"
         );
     }
 }

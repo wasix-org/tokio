@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::task::{Context, Poll};
 
-pub(crate) type OsStorage = Vec<SignalInfo>;
+pub(crate) type OsStorage = Box<[SignalInfo]>;
 
 impl Init for OsStorage {
     fn init() -> Self {
@@ -107,7 +107,7 @@ impl SignalKind {
         self.0
     }
 
-    /// Represents the SIGALRM signal.
+    /// Represents the `SIGALRM` signal.
     ///
     /// On Unix systems this signal is sent when a real-time timer has expired.
     /// By default, the process is terminated by this signal.
@@ -115,7 +115,7 @@ impl SignalKind {
         Self(libc::SIGALRM)
     }
 
-    /// Represents the SIGCHLD signal.
+    /// Represents the `SIGCHLD` signal.
     ///
     /// On Unix systems this signal is sent when the status of a child process
     /// has changed. By default, this signal is ignored.
@@ -123,7 +123,7 @@ impl SignalKind {
         Self(libc::SIGCHLD)
     }
 
-    /// Represents the SIGHUP signal.
+    /// Represents the `SIGHUP` signal.
     ///
     /// On Unix systems this signal is sent when the terminal is disconnected.
     /// By default, the process is terminated by this signal.
@@ -131,7 +131,7 @@ impl SignalKind {
         Self(libc::SIGHUP)
     }
 
-    /// Represents the SIGINFO signal.
+    /// Represents the `SIGINFO` signal.
     ///
     /// On Unix systems this signal is sent to request a status update from the
     /// process. By default, this signal is ignored.
@@ -146,7 +146,7 @@ impl SignalKind {
         Self(libc::SIGINFO)
     }
 
-    /// Represents the SIGINT signal.
+    /// Represents the `SIGINT` signal.
     ///
     /// On Unix systems this signal is sent to interrupt a program.
     /// By default, the process is terminated by this signal.
@@ -154,7 +154,7 @@ impl SignalKind {
         Self(libc::SIGINT)
     }
 
-    /// Represents the SIGIO signal.
+    /// Represents the `SIGIO` signal.
     ///
     /// On Unix systems this signal is sent when I/O operations are possible
     /// on some file descriptor. By default, this signal is ignored.
@@ -162,7 +162,7 @@ impl SignalKind {
         Self(libc::SIGIO)
     }
 
-    /// Represents the SIGPIPE signal.
+    /// Represents the `SIGPIPE` signal.
     ///
     /// On Unix systems this signal is sent when the process attempts to write
     /// to a pipe which has no reader. By default, the process is terminated by
@@ -171,7 +171,7 @@ impl SignalKind {
         Self(libc::SIGPIPE)
     }
 
-    /// Represents the SIGQUIT signal.
+    /// Represents the `SIGQUIT` signal.
     ///
     /// On Unix systems this signal is sent to issue a shutdown of the
     /// process, after which the OS will dump the process core.
@@ -180,7 +180,7 @@ impl SignalKind {
         Self(libc::SIGQUIT)
     }
 
-    /// Represents the SIGTERM signal.
+    /// Represents the `SIGTERM` signal.
     ///
     /// On Unix systems this signal is sent to issue a shutdown of the
     /// process. By default, the process is terminated by this signal.
@@ -188,7 +188,7 @@ impl SignalKind {
         Self(libc::SIGTERM)
     }
 
-    /// Represents the SIGUSR1 signal.
+    /// Represents the `SIGUSR1` signal.
     ///
     /// On Unix systems this is a user defined signal.
     /// By default, the process is terminated by this signal.
@@ -196,7 +196,7 @@ impl SignalKind {
         Self(libc::SIGUSR1)
     }
 
-    /// Represents the SIGUSR2 signal.
+    /// Represents the `SIGUSR2` signal.
     ///
     /// On Unix systems this is a user defined signal.
     /// By default, the process is terminated by this signal.
@@ -204,7 +204,7 @@ impl SignalKind {
         Self(libc::SIGUSR2)
     }
 
-    /// Represents the SIGWINCH signal.
+    /// Represents the `SIGWINCH` signal.
     ///
     /// On Unix systems this signal is sent when the terminal window is resized.
     /// By default, this signal is ignored.
@@ -271,7 +271,7 @@ fn signal_enable(signal: SignalKind, handle: &Handle) -> io::Result<()> {
     if signal < 0 || signal_hook_registry::FORBIDDEN.contains(&signal) {
         return Err(Error::new(
             ErrorKind::Other,
-            format!("Refusing to register signal {}", signal),
+            format!("Refusing to register signal {signal}"),
         ));
     }
 
@@ -343,10 +343,10 @@ fn signal_enable(signal: SignalKind, handle: &Handle) -> io::Result<()> {
 /// entire process**.
 ///
 /// For example, Unix systems will terminate a process by default when it
-/// receives SIGINT. But, when a `Signal` instance is created to listen for
-/// this signal, the next SIGINT that arrives will be translated to a stream
+/// receives `SIGINT`. But, when a `Signal` instance is created to listen for
+/// this signal, the next `SIGINT` that arrives will be translated to a stream
 /// event, and the process will continue to execute. **Even if this `Signal`
-/// instance is dropped, subsequent SIGINT deliveries will end up captured by
+/// instance is dropped, subsequent `SIGINT` deliveries will end up captured by
 /// Tokio, and the default platform behavior will NOT be reset**.
 ///
 /// Thus, applications should take care to ensure the expected signal behavior
@@ -354,7 +354,7 @@ fn signal_enable(signal: SignalKind, handle: &Handle) -> io::Result<()> {
 ///
 /// # Examples
 ///
-/// Wait for SIGHUP
+/// Wait for `SIGHUP`
 ///
 /// ```rust,no_run
 /// use tokio::signal::unix::{signal, SignalKind};
@@ -437,7 +437,7 @@ impl Signal {
     ///
     /// # Examples
     ///
-    /// Wait for SIGHUP
+    /// Wait for `SIGHUP`
     ///
     /// ```rust,no_run
     /// use tokio::signal::unix::{signal, SignalKind};
@@ -498,10 +498,12 @@ impl Signal {
 }
 
 // Work around for abstracting streams internally
+#[cfg(feature = "process")]
 pub(crate) trait InternalStream {
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<()>>;
 }
 
+#[cfg(feature = "process")]
 impl InternalStream for Signal {
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<()>> {
         self.poll_recv(cx)

@@ -149,23 +149,31 @@ When updating this, also update:
 -->
 
 ```
-cargo +1.65.0 clippy --all --tests --all-features
+cargo +1.77 clippy --all --tests --all-features
 ```
 
-When building documentation normally, the markers that list the features
-required for various parts of Tokio are missing. To build the documentation
-correctly, use this command:
+When building documentation, a simple `cargo doc` is not sufficient. To produce
+documentation equivalent to what will be produced in docs.rs's builds of Tokio's
+docs, please use:
 
 ```
-RUSTDOCFLAGS="--cfg docsrs" RUSTFLAGS="--cfg docsrs" cargo +nightly doc --all-features
+RUSTDOCFLAGS="--cfg docsrs --cfg tokio_unstable" RUSTFLAGS="--cfg docsrs --cfg tokio_unstable" cargo +nightly doc --all-features [--open]
 ```
 
-To build documentation including Tokio's unstable features, it is necessary to
-pass `--cfg tokio_unstable` to both RustDoc *and* rustc. To build the
-documentation for unstable features, use this command:
+This turns on indicators to display the Cargo features required for
+conditionally compiled APIs in Tokio, and it enables documentation of unstable
+Tokio features. Notice that it is necessary to pass cfg flags to both RustDoc
+*and* rustc.
+
+There is a more concise way to build docs.rs-equivalent docs by using [`cargo
+docs-rs`], which reads the above documentation flags out of Tokio's Cargo.toml
+as docs.rs itself does.
+
+[`cargo docs-rs`]: https://github.com/dtolnay/cargo-docs-rs
 
 ```
-RUSTDOCFLAGS="--cfg docsrs --cfg tokio_unstable" RUSTFLAGS="--cfg docsrs --cfg tokio_unstable" cargo +nightly doc --all-features
+cargo install --locked cargo-docs-rs
+cargo +nightly docs-rs [--open]
 ```
 
 The `cargo fmt` command does not work on the Tokio codebase. You can use the
@@ -184,15 +192,35 @@ it, `rustfmt` will update your files locally instead.
 You can run loom tests with
 ```
 cd tokio # tokio crate in workspace
-LOOM_MAX_PREEMPTIONS=1 RUSTFLAGS="--cfg loom" \
+LOOM_MAX_PREEMPTIONS=1 LOOM_MAX_BRANCHES=10000 RUSTFLAGS="--cfg loom -C debug_assertions" \
     cargo test --lib --release --features full -- --test-threads=1 --nocapture
 ```
+Additionally, you can also add `--cfg tokio_unstable` to the `RUSTFLAGS` environment variable to
+run loom tests that test unstable features. 
 
 You can run miri tests with
 ```
-MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tag-raw-pointers" \
-    cargo +nightly miri test --features full --lib
+MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-retag-fields" \
+    cargo +nightly miri test --features full --lib --tests
 ```
+
+### Performing spellcheck on tokio codebase
+
+You can perform spell-check on tokio codebase. For details of how to use the spellcheck tool, feel free to visit
+https://github.com/drahnr/cargo-spellcheck
+```
+# First install the spell-check plugin
+cargo install --locked cargo-spellcheck
+
+# Then run the cargo spell check command
+cargo spellcheck check
+```
+
+if the command rejects a word, you should backtick the rejected word if it's code related. If not, the 
+rejected word should be put into `spellcheck.dic` file. 
+
+Note that when you add a word into the file, you should also update the first line which tells the spellcheck tool
+the total number of words included in the file
 
 ### Tests
 
@@ -233,7 +261,7 @@ directory `fuzz`. It is a good idea to run fuzz tests after each change.
 To get started with fuzz testing you'll need to install
 [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz).
 
-`cargo install cargo-fuzz`
+`cargo install --locked cargo-fuzz`
 
 To list the available fuzzing harnesses you can run;
 
@@ -241,7 +269,7 @@ To list the available fuzzing harnesses you can run;
 $ cd tokio
 $ cargo fuzz list
 fuzz_linked_list
-````
+```
 
 Running a fuzz test is as simple as;
 
@@ -327,6 +355,29 @@ example would explicitly use `Timeout::new`. For example:
 /// # }
 ```
 
+### Benchmarks
+
+You can run benchmarks locally for the changes you've made to the tokio codebase.
+Tokio currently uses [Criterion](https://github.com/bheisler/criterion.rs) as its benchmarking tool. To run a benchmark
+against the changes you have made, for example, you can run;
+
+```bash
+cd benches
+
+# Run all benchmarks.
+cargo bench
+
+# Run all tests in the `benches/fs.rs` file
+cargo bench --bench fs
+
+# Run the `async_read_buf` benchmark in `benches/fs.rs` specifically.
+cargo bench async_read_buf
+
+# After running benches, you can check the statistics under `tokio/target/criterion/`
+```
+
+You can also refer to Criterion docs for additional options and details.
+
 ### Commits
 
 It is a recommended best practice to keep your changes as logically grouped as
@@ -350,14 +401,16 @@ A good commit message should describe what changed and why.
     and no more than 72 characters)
   * be entirely in lowercase with the exception of proper nouns, acronyms, and
     the words that refer to code, like function/variable names
-  * be prefixed with the name of the sub crate being changed (without the `tokio-`
-    prefix) and start with an imperative verb. If modifying `tokio` proper,
-    omit the crate prefix.
+  * start with an imperative verb
+  * not have a period at the end
+  * be prefixed with the name of the module being changed; usually this is the
+    same as the M-* label on the PR
 
   Examples:
 
-  * timer: introduce `Timeout` and deprecate `Deadline`
-  * export `Encoder`, `Decoder`, `Framed*` from tokio_codec
+  * time: introduce `Timeout` and deprecate `Deadline`
+  * codec: export `Encoder`, `Decoder`, `Framed*`
+  * ci: fix the FreeBSD ci configuration
 
 2. Keep the second line blank.
 3. Wrap all other lines at 72 columns (except for long URLs).
@@ -374,7 +427,7 @@ A good commit message should describe what changed and why.
 Sample complete commit message:
 
 ```txt
-subcrate: explain the commit in one line
+module: explain the commit in one line
 
 Body of commit message is a few lines of text, explaining things
 in more detail, possibly giving some background about the issue

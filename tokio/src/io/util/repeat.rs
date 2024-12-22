@@ -1,8 +1,9 @@
+use crate::io::util::poll_proceed_and_make_progress;
 use crate::io::{AsyncRead, ReadBuf};
 
 use std::io;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_io_util! {
     /// An async reader which yields one byte over and over and over and over and
@@ -50,9 +51,11 @@ impl AsyncRead for Repeat {
     #[inline]
     fn poll_read(
         self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        ready!(crate::trace::trace_leaf(cx));
+        ready!(poll_proceed_and_make_progress(cx));
         // TODO: could be faster, but should we unsafe it?
         while buf.remaining() != 0 {
             buf.put_slice(&[self.byte]);
