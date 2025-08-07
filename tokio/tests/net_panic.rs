@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![cfg(all(feature = "full", not(target_os = "wasi")))]
+#![cfg(panic = "unwind")]
 
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
@@ -10,8 +11,8 @@ mod support {
 }
 use support::panic::test_panic;
 
-#[cfg(panic = "unwind")]
 #[test]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn udp_socket_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     use std::net::SocketAddr;
     use tokio::net::UdpSocket;
@@ -33,8 +34,8 @@ fn udp_socket_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(panic = "unwind")]
 #[test]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn tcp_listener_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     std_listener.set_nonblocking(true).unwrap();
@@ -52,8 +53,8 @@ fn tcp_listener_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(panic = "unwind")]
 #[test]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn tcp_stream_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
 
@@ -75,6 +76,7 @@ fn tcp_stream_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn unix_listener_bind_panic_caller() -> Result<(), Box<dyn Error>> {
     use tokio::net::UnixListener;
 
@@ -96,12 +98,13 @@ fn unix_listener_bind_panic_caller() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn unix_listener_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     use tokio::net::UnixListener;
 
     let dir = tempfile::tempdir().unwrap();
     let sock_path = dir.path().join("socket");
-    let std_listener = std::os::unix::net::UnixListener::bind(&sock_path).unwrap();
+    let std_listener = std::os::unix::net::UnixListener::bind(sock_path).unwrap();
 
     let panic_location_file = test_panic(|| {
         let rt = runtime_without_io();
@@ -118,6 +121,7 @@ fn unix_listener_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn unix_stream_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     use tokio::net::UnixStream;
 
@@ -141,6 +145,7 @@ fn unix_stream_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(miri, ignore)] // No `socket` in miri.
 fn unix_datagram_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     use std::os::unix::net::UnixDatagram as StdUDS;
     use tokio::net::UnixDatagram;
@@ -150,7 +155,7 @@ fn unix_datagram_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
 
     // Bind the socket to a filesystem path
     // /let socket_path = tmp.path().join("socket");
-    let std_socket = StdUDS::bind(&sock_path).unwrap();
+    let std_socket = StdUDS::bind(sock_path).unwrap();
     std_socket.set_nonblocking(true).unwrap();
 
     let panic_location_file = test_panic(move || {
@@ -166,7 +171,6 @@ fn unix_datagram_from_std_panic_caller() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(panic = "unwind")]
 #[test]
 #[cfg(windows)]
 fn server_options_max_instances_panic_caller() -> Result<(), Box<dyn Error>> {

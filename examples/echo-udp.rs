@@ -6,9 +6,9 @@
 //!
 //! and in another terminal you can run:
 //!
-//!     cargo run --example connect -- --udp 127.0.0.1:8080
+//!     cargo run --example connect-udp 127.0.0.1:8080
 //!
-//! Each line you type in to the `nc` terminal should be echo'd back to you!
+//! Each line you type in to the `connect-udp` terminal should be echo'd back to you!
 
 #![warn(rust_2018_idioms)]
 
@@ -38,7 +38,7 @@ impl Server {
             if let Some((size, peer)) = to_send {
                 let amt = socket.send_to(&buf[..size], &peer).await?;
 
-                println!("Echoed {}/{} bytes to {}", amt, size, peer);
+                println!("Echoed {amt}/{size} bytes to {peer}");
             }
 
             // If we're here then `to_send` is `None`, so we take a look for the

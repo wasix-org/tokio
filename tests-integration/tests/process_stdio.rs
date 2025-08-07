@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", not(target_os = "wasi")))]
+#![cfg(all(feature = "full", not(target_os = "wasi"), not(miri)))]
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::join;
@@ -10,6 +10,7 @@ use futures::future::{self, FutureExt};
 use std::env;
 use std::io;
 use std::process::{ExitStatus, Stdio};
+use std::task::ready;
 
 fn cat() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_test-cat"));
@@ -24,7 +25,7 @@ async fn feed_cat(mut cat: Child, n: usize) -> io::Result<ExitStatus> {
     // Produce n lines on the child's stdout.
     let write = async {
         for i in 0..n {
-            let bytes = format!("line {}\n", i).into_bytes();
+            let bytes = format!("line {i}\n").into_bytes();
             stdin.write_all(&bytes).await.unwrap();
         }
 
@@ -51,7 +52,7 @@ async fn feed_cat(mut cat: Child, n: usize) -> io::Result<ExitStatus> {
                 (false, 0) => panic!("broken pipe"),
                 (true, n) if n != 0 => panic!("extraneous data"),
                 _ => {
-                    let expected = format!("line {}", num_lines);
+                    let expected = format!("line {num_lines}");
                     assert_eq!(expected, data);
                 }
             };
@@ -205,13 +206,13 @@ async fn vectored_writes() {
         let mut input = Bytes::from_static(b"hello\n").chain(Bytes::from_static(b"world!\n"));
         let mut writes_completed = 0;
 
-        futures::future::poll_fn(|cx| loop {
+        std::future::poll_fn(|cx| loop {
             let mut slices = [IoSlice::new(&[]); 2];
             let vectored = input.chunks_vectored(&mut slices);
             if vectored == 0 {
                 return std::task::Poll::Ready(std::io::Result::Ok(()));
             }
-            let n = futures::ready!(Pin::new(&mut stdin).poll_write_vectored(cx, &slices))?;
+            let n = ready!(Pin::new(&mut stdin).poll_write_vectored(cx, &slices))?;
             writes_completed += 1;
             input.advance(n);
         })

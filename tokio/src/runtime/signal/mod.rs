@@ -71,8 +71,9 @@ impl Driver {
             let receiver_fd = globals().receiver.as_raw_fd();
 
             // safety: there is nothing unsafe about this, but the `from_raw_fd` fn is marked as unsafe.
-            let original =
-                ManuallyDrop::new(unsafe { std::os::unix::net::UnixStream::from_raw_fd(receiver_fd) });
+            let original = ManuallyDrop::new(unsafe {
+                std::os::unix::net::UnixStream::from_raw_fd(receiver_fd)
+            });
             let mut receiver = UnixStream::from_std(original.try_clone()?);
 
             io_handle.register_signal_receiver(&mut receiver)?;
@@ -121,6 +122,7 @@ impl Driver {
         #[cfg(not(target_os = "wasi"))]
         {
             let mut buf = [0; 128];
+            #[allow(clippy::unused_io_amount)]
             loop {
                 match self.receiver.read(&mut buf) {
                     Ok(0) => panic!("EOF on self-pipe"),

@@ -25,14 +25,11 @@
 //! assert!(task.poll().is_ready(), "Task was not ready!");
 //! ```
 
-#![allow(clippy::mutex_atomic)]
-
 use std::future::Future;
-use std::mem;
 use std::ops;
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
-use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use std::task::{Context, Poll, Wake, Waker};
 
 use tokio_stream::Stream;
 
@@ -51,6 +48,7 @@ pub fn spawn<T>(task: T) -> Spawn<T> {
 /// Future spawned on a mock task that can be used to poll the future or stream
 /// without needing pinning or context types.
 #[derive(Debug)]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Spawn<T> {
     task: MockTask,
     future: Pin<Box<T>>,
@@ -149,6 +147,10 @@ impl<T: Stream> Stream for Spawn<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.future.as_mut().poll_next(cx)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.future.size_hint()
+    }
 }
 
 impl MockTask {
@@ -168,7 +170,7 @@ impl MockTask {
         F: FnOnce(&mut Context<'_>) -> R,
     {
         self.waker.clear();
-        let waker = self.waker();
+        let waker = self.clone().into_waker();
         let mut cx = Context::from_waker(&waker);
 
         f(&mut cx)
@@ -187,11 +189,8 @@ impl MockTask {
         Arc::strong_count(&self.waker)
     }
 
-    fn waker(&self) -> Waker {
-        unsafe {
-            let raw = to_raw(self.waker.clone());
-            Waker::from_raw(raw)
-        }
+    fn into_waker(self) -> Waker {
+        self.waker.into()
     }
 }
 
@@ -223,8 +222,14 @@ impl ThreadWaker {
             _ => unreachable!(),
         }
     }
+}
 
-    fn wake(&self) {
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
         // First, try transitioning from IDLE -> NOTIFY, this does not require a lock.
         let mut state = self.state.lock().unwrap();
         let prev = *state;
@@ -243,40 +248,4 @@ impl ThreadWaker {
         assert_eq!(prev, SLEEP);
         self.condvar.notify_one();
     }
-}
-
-static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop_waker);
-
-unsafe fn to_raw(waker: Arc<ThreadWaker>) -> RawWaker {
-    RawWaker::new(Arc::into_raw(waker) as *const (), &VTABLE)
-}
-
-unsafe fn from_raw(raw: *const ()) -> Arc<ThreadWaker> {
-    Arc::from_raw(raw as *const ThreadWaker)
-}
-
-unsafe fn clone(raw: *const ()) -> RawWaker {
-    let waker = from_raw(raw);
-
-    // Increment the ref count
-    mem::forget(waker.clone());
-
-    to_raw(waker)
-}
-
-unsafe fn wake(raw: *const ()) {
-    let waker = from_raw(raw);
-    waker.wake();
-}
-
-unsafe fn wake_by_ref(raw: *const ()) {
-    let waker = from_raw(raw);
-    waker.wake();
-
-    // We don't actually own a reference to the unparker
-    mem::forget(waker);
-}
-
-unsafe fn drop_waker(raw: *const ()) {
-    let _ = from_raw(raw);
 }

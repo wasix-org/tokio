@@ -4,7 +4,7 @@ use criterion::measurement::WallTime;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
 #[derive(Debug, Copy, Clone)]
-struct Medium([usize; 64]);
+struct Medium(#[allow(dead_code)] [usize; 64]);
 impl Default for Medium {
     fn default() -> Self {
         Medium([0; 64])
@@ -12,7 +12,7 @@ impl Default for Medium {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct Large([Medium; 64]);
+struct Large(#[allow(dead_code)] [Medium; 64]);
 impl Default for Large {
     fn default() -> Self {
         Large([Medium::default(); 64])
@@ -37,7 +37,7 @@ fn create_medium<const SIZE: usize>(g: &mut BenchmarkGroup<WallTime>) {
 fn send_data<T: Default, const SIZE: usize>(g: &mut BenchmarkGroup<WallTime>, prefix: &str) {
     let rt = rt();
 
-    g.bench_function(format!("{}_{}", prefix, SIZE), |b| {
+    g.bench_function(format!("{prefix}_{SIZE}"), |b| {
         b.iter(|| {
             let (tx, mut rx) = mpsc::channel::<T>(SIZE);
 
