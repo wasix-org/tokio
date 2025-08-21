@@ -788,7 +788,10 @@ impl Command {
     #[cfg(any(unix, target_vendor = "wasmer"))]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn process_group(&mut self, pgroup: i32) -> &mut Command {
-        self.std.process_group(pgroup);
+        #[cfg(not(target_vendor = "wasmer"))]
+        {
+            self.std.process_group(pgroup);
+        }
         self
     }
 
