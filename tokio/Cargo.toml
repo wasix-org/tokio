@@ -127,13 +127,13 @@ parking_lot = { git = "https://github.com/wasix-org/parking_lot.git", features =
 tracing = { version = "0.1.25", default-features = false, features = ["std"], optional = true } # Not in full
 
 [target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
-libc = { version = "=0.2.139", git = "https://github.com/wasix-org/libc.git", optional = true }
+libc = { version = "=0.2.169", git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.169", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook-registry = { version = "1.1.1", optional = true }
 
 [target.'cfg(any(unix, target_os = "wasi"))'.dev-dependencies]
-libc = {version = "=0.2.139", git = "https://github.com/wasix-org/libc.git" }
+libc = { version = "=0.2.169", git = "https://github.com/wasix-org/libc.git", branch = "wasix-0.2.169" }
 nix = { version = "0.24", default-features = false, features = ["fs", "socket"] }
 
 [target.'cfg(windows)'.dependencies.winapi]
